@@ -11,8 +11,9 @@ featured and polished, so it sets the quality bar.
 - **Game code lives here; the engine lives in `../playweft`.** A gap found here becomes a **general** Playweft
   feature (its own PR there, following its CLAUDE.md) or a card on the Playweft Overboard board tagged
   `braynard-racing`. Never a Braynard-only hack in the engine.
-- **Art:** `art/` holds sources and approved pieces (`concepts/`, `racers/`, `karts/`, `world/`). Characters are
-  sculpted in hifipushie; props and scenery come through oxidegen. Big working files (models, renders, scripts)
+- **Art:** `art/` holds sources and approved pieces (`concepts/`, `racers/`, `karts/`, `world/`). Concepts come from
+  oxidegen (through its MCP, with the style guide). Characters, props and scenery are built in hifipushie on
+  Joe's local runners from those concepts, never with oxidegen's mesh generation. Big working files (models, renders, scripts)
   go in `workspace/` (git-ignored).
 - **Project files** (`playweft.json`, `scene.weave` …) are made by the Playweft editor
   (`pw-studio-desktop --new <folder>`), never hand-written.

@@ -10,7 +10,9 @@ featured and polished, so it sets the quality bar.
   goes in.
 - **Game code lives here; the engine lives in `../playweft`.** A gap found here becomes a **general** Playweft
   feature (its own PR there, following its CLAUDE.md) or a card on the Playweft Overboard board tagged
-  `braynard-racing`. Never a Braynard-only hack in the engine.
+  `braynard-racing`. Never a Braynard-only hack in the engine. Braynard sessions may open those Playweft PRs and
+  pin to them, in order, to keep going, but never merge them: the Playweft side reviews and merges. Playweft
+  sessions may check out, fork or PR from this repo when troubleshooting issues reported in the game.
 - **Art:** `art/` holds sources and approved pieces (`concepts/`, `racers/`, `karts/`, `world/`). Concepts come from
   oxidegen (through its MCP, with the style guide). Characters, props and scenery are built in hifipushie on
   Joe's local runners from those concepts, never with oxidegen's mesh generation. Big working files (models, renders, scripts)

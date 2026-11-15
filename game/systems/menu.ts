@@ -18,7 +18,7 @@ const GATE_SETTLE = 0.6;
 const S = pw.component("seat");
 const f = Object.fromEntries(["gateDone", "gateClock", "menuOpen", "menuPage", "menuHeld", "froze", "scaleBefore", "alone", "placed", "devOpen"].map((n) => [n, S.property(n)]));
 const player = pw.field("controls", "player");
-const a = Object.fromEntries(["menu", "stick", "gas", "brake", "drift"].map((n) => [n, pw.action("drive", n)]));
+const a = Object.fromEntries(["menu", "map", "stick", "gas", "brake", "drift"].map((n) => [n, pw.action("drive", n)]));
 
 function open(seat, n, page) {
   if (seat.get(f.menuOpen) === 0) pauseSave.add(n);
@@ -54,7 +54,8 @@ pw.registerSystem("menus", { includeComponents: ["seat", "controls"], events: ["
       const [sx, sy] = seat.get(a.stick) ?? [0, 0];
       const driving = Math.hypot(sx, sy) > 0.4 || (seat.get(a.gas) ?? 0) > 0.3 || (seat.get(a.brake) ?? 0) > 0.3 || seat.get(a.drift) === true;
       seat.set(f.gateClock, t);
-      if (t >= GATE_FOR || (t >= GATE_SETTLE && driving)) seat.set(f.gateDone, 1);
+      // Opening the county map (M or the d-pad) dismisses it too.
+      if (t >= GATE_FOR || (t >= GATE_SETTLE && driving) || seat.get(a.map) === true) seat.set(f.gateDone, 1);
     }
 
     // The menu button: a press opens or closes the pause menu (it closes the dev menu first if that's open).
@@ -69,7 +70,10 @@ pw.registerSystem("menus", { includeComponents: ["seat", "controls"], events: ["
       if (e.seat !== n) continue;
       // Opening the county map from the menu hands over to it (systems/map.ts).
       if (e.name === "map") {
-        if (e.what === "open") seat.set(f.menuOpen, 0);
+        if (e.what === "open") {
+          seat.set(f.menuOpen, 0);
+          seat.set(f.gateDone, 1);
+        }
         continue;
       }
       const page = Math.max(0, Math.min(5, Math.round(e.n)));

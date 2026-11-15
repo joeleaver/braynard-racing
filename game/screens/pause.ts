@@ -52,6 +52,28 @@ styles(`
 .racer.locked { opacity: 0.45; }
 .kind, .booktext, .bookh, .num, .cap, .ptitle, .ptext, .pdim, .pkey, .racername { display: block; }
 .col, .col > * { color: #2A2A22; }
+
+.setrow { display: flex; flex-direction: row; gap: 22px; }
+.setnav { display: flex; flex-direction: column; gap: 6px; width: 170px; }
+.setnav .sub { text-align: left; font-size: 16px; padding: 8px 14px; }
+.setnav .sub.on { background: #FFC531; color: #1D4426; }
+.setbody { flex: 1; min-width: 0; }
+.srow { display: flex; flex-direction: row; flex-wrap: wrap; align-items: center; gap: 10px; padding: 7px 0; border-bottom: 1px solid #4E8C5580; }
+.sname { width: 240px; font-size: 16px; color: #FFFBF2; }
+.keys { display: flex; flex-direction: row; flex-wrap: wrap; gap: 6px; flex: 1; }
+.keycap { border: 0; border-radius: 8px; padding: 6px 12px; font-size: 14px; background: #FFFBF2; color: #1D4426; box-shadow: 0 3px 0 #B9D6B4; }
+.keycap.changed { background: #FFE39A; }
+.keycap.on { background: #FFC531; box-shadow: 0 3px 0 #B07F12; }
+.keycap.danger { background: #D63B2F; color: #FFFBF2; box-shadow: 0 3px 0 #8E2A1C; }
+.opt { border: 0; border-radius: 999px; padding: 6px 16px; font-size: 14px; background: #24552E; color: #B9D6B4; box-shadow: inset 0 0 0 2px #4E8C55; }
+.opt.on { background: #FFC531; color: #1D4426; box-shadow: 0 3px 0 #B07F12; }
+.step { width: 34px; height: 34px; border: 0; border-radius: 17px; font-size: 20px; background: #FFFBF2; color: #1D4426; box-shadow: 0 3px 0 #B9D6B4; }
+.meter { width: 220px; height: 14px; border-radius: 8px; background: #0B1A0F; overflow: hidden; }
+.meterfill { height: 100%; border-radius: 8px; background: #FFC531; }
+.sval { width: 50px; font-size: 15px; color: #FFFBF2; }
+.big .ptext, .big .booktext, .big .sname, .big .pkey { font-size: 21px; }
+.big .pdim, .big .cap, .big .keycap { font-size: 18px; }
+.big .tab { font-size: 24px; }
 .snap:nth-child(odd) { transform: rotate(-1deg); }
 .snap:nth-child(even) { transform: rotate(1deg); }
 .racerhead { width: 84px; height: 84px; border-radius: 42px; border: 3px solid #FFFBF2; }
@@ -60,8 +82,9 @@ styles(`
 
 const S = pw.component("seat");
 const f = Object.fromEntries(
-  ["menuOpen", "menuPage", "menuSub", "froze", "money", "statPlayed", "statDriven", "statBestDrift", "statBestAir", "statDrifts", "statTurbos", "eggs", "racerBits"].map((n) => [n, S.property(n)]),
+  ["menuOpen", "menuPage", "menuSub", "setSub", "opts", "confirmClear", "froze", "money", "statPlayed", "statDriven", "statBestDrift", "statBestAir", "statDrifts", "statTurbos", "eggs", "racerBits"].map((n) => [n, S.property(n)]),
 );
+const bindText = Object.fromEntries(["stick", "gas", "brake", "drift", "respawn", "menu", "map"].map((a) => [a, S.text(`bind${a[0].toUpperCase()}${a.slice(1)}`)]));
 const player = pw.field("controls", "player");
 const heads = RACERS.map((r) => pw.image(`${r.name} headshot`));
 const TABS = ["Journal", "Map", "Scrapbook", "Racers", "Garage", "Friends", "Settings"];
@@ -175,19 +198,131 @@ function sheet(title, lines, buttons = []) {
   return box({ class: "board sheet" }, [label({ class: "ptitle" }, title), ...lines, ...(buttons.length ? [box({ class: "prow" }, buttons)] : [])]);
 }
 
-function tab(n, me, net, typed) {
+// Settings: five sections down the side, the chosen one beside them.
+const SECTIONS = ["Controls", "Sound", "Picture", "Accessibility", "Game"];
+const ACTIONS = { stick: "Steer and throttle", gas: "Throttle", brake: "Brake", drift: "Drift", respawn: "Back on the road", menu: "This menu", map: "County map" };
+const SLOTS = { up: "forward", down: "back", left: "left", right: "right" };
+const PRESETS = [["low", "Low"], ["medium", "Medium"], ["high", "High"], ["ultra", "Ultra"]];
+const set = (what, key = "", n = 0) => pw.emit("setting", { what, key, n });
+
+function toggle(me, key, words, bit) {
+  const on = (me.get(f.opts) & bit) !== 0;
+  return box({ class: "srow" }, [
+    label({ class: "sname" }, words),
+    button({ class: on ? "opt on" : "opt", onclick: set("opt", key) }, on ? "On" : "Off"),
+  ]);
+}
+
+function controlsSection(me) {
+  let listening = false;
+  const groups = Object.keys(ACTIONS).map((action) => {
+    const text = me.get(bindText[action]) || "";
+    if (text === "") return null;
+    const keys = text.split("|").map((raw, i) => {
+      const on = raw.startsWith("*");
+      const changed = raw.startsWith("~");
+      const body = on || changed ? raw.slice(1) : raw;
+      const [first, ...rest] = body.split(" ");
+      const slot = SLOTS[first] !== undefined && rest.length > 0 ? SLOTS[first] : "";
+      const shown = slot ? rest.join(" ") : body;
+      if (on) listening = true;
+      return button({ class: on ? "keycap on" : changed ? "keycap changed" : "keycap", onclick: set("bind", `${action}:${i}`) }, `${slot ? `${slot}: ` : ""}${on ? "Press a key…" : shown}`);
+    });
+    return box({ class: "srow" }, [label({ class: "sname" }, ACTIONS[action]), box({ class: "keys" }, keys)]);
+  }).filter((g) => g !== null);
+  return [
+    ...groups,
+    toggle(me, "driftToggle", "Drift: press to start, press to stop", 1),
+    toggle(me, "autoGas", "Accelerate by itself", 2),
+    box({ class: "prow" }, [
+      ...(listening ? [button({ class: "go second", onclick: set("stop") }, "Stop listening")] : []),
+      button({ class: "go second", onclick: set("reset") }, "Reset controls"),
+    ]),
+    label({ class: "pdim" }, "Choose a key, then press the one you want. Escape cancels."),
+  ];
+}
+
+function soundSection(volume) {
+  const buses = Object.keys(volume);
+  if (buses.length === 0) return [label({ class: "ptext" }, "This game's mix has no buses to set yet.")];
+  return buses.map((bus) => {
+    const v = volume[bus];
+    return box({ class: "srow" }, [
+      label({ class: "sname" }, bus),
+      button({ class: "step", onclick: set("volume", bus, Math.max(0, v - 0.1)) }, "−"),
+      box({ class: "meter" }, [box({ class: "meterfill", style: `width: ${Math.round(v * 100)}%` }, [])]),
+      button({ class: "step", onclick: set("volume", bus, Math.min(1, v + 0.1)) }, "+"),
+      label({ class: "sval" }, `${Math.round(v * 100)}%`),
+    ]);
+  });
+}
+
+function pictureSection(quality) {
+  const ms = quality.gpuTime ?? quality.frameTime;
+  return [
+    box({ class: "srow" }, [label({ class: "sname" }, "Quality"), box({ class: "keys" }, PRESETS.map(([key, words]) => button({ class: "keycap", onclick: set("preset", key) }, words)))]),
+    box({ class: "srow" }, [
+      label({ class: "sname" }, "Sharpness"),
+      button({ class: "step", onclick: set("scale", "", quality.renderScale - 0.1) }, "−"),
+      box({ class: "meter" }, [box({ class: "meterfill", style: `width: ${Math.round(quality.renderScale * 100)}%` }, [])]),
+      button({ class: "step", onclick: set("scale", "", quality.renderScale + 0.1) }, "+"),
+      label({ class: "sval" }, `${Math.round(quality.renderScale * 100)}%`),
+    ]),
+    label({ class: "pdim" }, `${Math.round(ms * 10) / 10} ms a frame${quality.gpuTime !== null ? " on the graphics card" : ""}. Lower quality or sharpness if it feels slow.`),
+  ];
+}
+
+function accessSection(me) {
+  return [
+    toggle(me, "bigText", "Bigger text in menus", 4),
+    toggle(me, "subtitles", "Subtitles for what the racers say", 16),
+    toggle(me, "reduceMotion", "Less camera shake and wobble", 8),
+    toggle(me, "colourSafe", "Colour-blind-safe markers", 256),
+    label({ class: "pdim" }, "Bigger text works now; the others take effect as their parts of the game arrive."),
+  ];
+}
+
+function gameSection(me, typed) {
+  const asked = me.get(f.confirmClear);
+  return [
+    toggle(me, "mph", "Speed in mph", 32),
+    toggle(me, "ghosts", "Your ghost when practising", 64),
+    toggle(me, "friendsGhosts", "Friends' ghosts when practising", 128),
+    box({ class: "srow" }, [
+      label({ class: "sname" }, "Your name"),
+      input({ class: "code", name: "playername", placeholder: "Your name" }),
+      button({ class: "keycap", onclick: pw.emit("rename", { to: typed.playername ?? "" }) }, "Save"),
+    ]),
+    box({ class: "srow" }, [
+      label({ class: "sname" }, asked === 0 ? "Delete my save" : asked === 1 ? "Everything you've earned goes. Sure?" : "Really? This can't be undone."),
+      button({ class: asked === 0 ? "keycap" : "keycap danger", onclick: set("clear") }, asked === 0 ? "Delete" : asked === 1 ? "Yes, delete" : "Delete it all"),
+      ...(asked > 0 ? [button({ class: "keycap", onclick: set("cancel") }, "Keep it")] : []),
+    ]),
+  ];
+}
+
+function settings(me, volume, quality, typed) {
+  const sub = me.get(f.setSub);
+  const sections = [controlsSection(me), soundSection(volume), pictureSection(quality), accessSection(me), gameSection(me, typed)];
+  return box({ class: "board sheet setrow" }, [
+    box({ class: "setnav" }, SECTIONS.map((name, i) => button({ class: i === sub ? "sub on" : "sub", onclick: set("sub", "", i) }, name))),
+    box({ class: "setbody" }, [label({ class: "ptitle" }, SECTIONS[sub]), ...sections[sub]]),
+  ]);
+}
+
+function tab(n, me, net, typed, volume, quality) {
   if (n === 0) return journal(me);
   if (n === 1) return sheet("Map", [label({ class: "ptext" }, "The whole county: tracks, jobs, friends and where you've been.")], [button({ class: "go", onclick: pw.emit("map", { what: "open" }) }, "Open the map")]);
   if (n === 2) return scrapbook(me);
   if (n === 3) return racers(me);
   if (n === 4) return sheet("Garage", [label({ class: "ptext" }, "Your barn at Home Farm: kart parts, paint and your trophies. Coming soon.")]);
   if (n === 5) return friends(net, typed);
-  if (n === 6) return sheet("Settings", [label({ class: "ptext" }, "Sound, picture, controls and accessibility. Coming soon.")]);
+  if (n === 6) return settings(me, volume, quality, typed);
   if (n === HELP) return sheet("Help", KEYS.map(([what, keys]) => label({ class: "pkey" }, `${what}: ${keys}`)));
   return sheet("Quit", [label({ class: "ptext" }, "Your spot and everything you've earned are saved. Close the game whenever you like.")], [button({ class: "go", onclick: say("close") }, "Keep playing")]);
 }
 
-pw.screen("pause", { includeComponents: [S], anchor: "fill" }, ({ seat, objects, net, typed }) => {
+pw.screen("pause", { includeComponents: [S], anchor: "fill" }, ({ seat, objects, net, typed, volume, quality }) => {
   const me = objects.find((o) => o.get(player) === seat.player);
   if (me === undefined || me.get(f.menuOpen) !== 1) return [];
   const current = me.get(f.menuPage);
@@ -199,5 +334,6 @@ pw.screen("pause", { includeComponents: [S], anchor: "fill" }, ({ seat, objects,
     button({ class: "tab small", onclick: say("close"), focus: "back" }, "Back"),
   ]);
   const note = label({ class: "pdim" }, me.get(f.froze) === 1 ? "Paused. Saved a moment ago." : "The county keeps going while you're here.");
-  return box({ class: "pause" }, [tabs, box({ class: "body" }, [tab(current, me, net, typed)]), note]);
+  const big = (me.get(f.opts) & 4) !== 0;
+  return box({ class: big ? "pause big" : "pause" }, [tabs, box({ class: "body" }, [tab(current, me, net, typed, volume, quality)]), note]);
 });

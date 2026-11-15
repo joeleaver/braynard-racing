@@ -18,6 +18,7 @@ import "./systems/dev_seats";
 import "./systems/map";
 import "./systems/save";
 import "./systems/menu";
+import "./systems/settings";
 import "./systems/world";
 import "./systems/driver";
 import "./systems/rivals";

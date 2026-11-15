@@ -10,6 +10,9 @@ pw.defineControls("drive", {
   respawn: pw.button(["key:r", "pad:back"]),
   // The pause menu (systems/menu.ts).
   menu: pw.button(["key:escape", "key:p", "pad:start"]),
+  // The county map (systems/map.ts): opens and closes it; while it's open the stick pans, rise and sink
+  // zoom, drift sets the waypoint and respawn clears it.
+  map: pw.button(["key:m", "pad:dpad-down"]),
   // Testing: the dev menu, and the free camera it flies (systems/dev.ts).
   dev: pw.button(["key:`", "key:f1", "pad:right-stick-press"]),
   look: pw.stick(["pad:right-stick"]),

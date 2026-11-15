@@ -24,11 +24,27 @@ pw.defineComponent("seat", {
   gateDone: pw.int(0, { group: "Menu", doc: "1 once this player has dismissed the front gate card this visit." }),
   gateClock: pw.float(0, { group: "Menu", doc: "Seconds the front gate card has been up." }),
   menuOpen: pw.int(0, { group: "Menu", doc: "1 while this player has the pause menu open." }),
-  menuPage: pw.int(0, { group: "Menu", doc: "The pause menu's page: 0 Map, 1 Friends, 2 Garage, 3 Settings, 4 Help, 5 Quit." }),
+  menuPage: pw.int(0, { group: "Menu", doc: "The pause menu's tab: 0 Journal, 1 Map, 2 Scrapbook, 3 Racers, 4 Garage, 5 Friends, 6 Settings, 7 Help, 8 Quit." }),
+  menuSub: pw.int(0, { group: "Menu", doc: "The Journal's page: 0 Quests, 1 Events." }),
+  tabHeld: pw.int(0, { group: "Menu", doc: "Which tab buttons are held (1 next, 2 previous), so a press moves one tab." }),
   menuHeld: pw.int(0, { group: "Menu", doc: "1 while the menu button is held, so a press toggles it once." }),
   froze: pw.int(0, { group: "Menu", doc: "1 while this player's pause menu has frozen the game (they are alone in it)." }),
   scaleBefore: pw.float(1, { group: "Menu", doc: "The time scale before the pause menu froze it, to put back." }),
   alone: pw.int(1, { group: "Menu", doc: "1 while this player is the only one in the game, copied here for the screens." }),
+
+  // Fun stats, counted as you play (systems/stats.ts) and kept in the save; copied here for the Scrapbook.
+  statLoaded: pw.int(0, { group: "Stats", doc: "1 once this player's stats have been read from their save this visit." }),
+  statFlush: pw.float(0, { group: "Stats", doc: "Seconds since the stats were last written to the save." }),
+  statPlayed: pw.float(0, { group: "Stats", unit: "s", doc: "Time played." }),
+  statDriven: pw.float(0, { group: "Stats", unit: "m", doc: "Distance driven." }),
+  statBestDrift: pw.float(0, { group: "Stats", unit: "s", doc: "Longest drift." }),
+  statBestAir: pw.float(0, { group: "Stats", unit: "s", doc: "Longest time in the air." }),
+  statDrifts: pw.int(0, { group: "Stats", doc: "Drifts." }),
+  statTurbos: pw.int(0, { group: "Stats", doc: "Mini-turbos." }),
+  statDriftNow: pw.float(0, { group: "Stats", unit: "s", doc: "The drift going on now, so far." }),
+  statAirNow: pw.float(0, { group: "Stats", unit: "s", doc: "The jump going on now, so far." }),
+  eggs: pw.int(0, { group: "Stats", doc: "Golden eggs found, copied from the save for the Scrapbook." }),
+  racerBits: pw.int(1, { group: "Stats", doc: "Racers unlocked, one bit each (Hettie is 1), copied from the save for the Racers tab." }),
 
   // The save (systems/save.ts).
   placed: pw.int(0, { group: "Save", doc: "1 once this player has been put at their saved spot (or beside the host) this run." }),

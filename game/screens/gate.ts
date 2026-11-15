@@ -16,8 +16,8 @@ pw.screen("gate", { includeComponents: [S], anchor: "bottom" }, ({ seat, objects
     label({ class: "gatehint" }, "Back where you left off. Just drive, or:"),
     box({ class: "gaterow", focus: "group" }, [
       button({ class: "go", onclick: pw.emit("menu", { what: "continue" }), focus: "first" }, "Continue"),
-      button({ class: "go second", onclick: pw.emit("menu", { what: "open", n: 1 }) }, "Play with friends"),
-      button({ class: "go second", onclick: pw.emit("menu", { what: "open", n: 3 }) }, "Settings"),
+      button({ class: "go second", onclick: pw.emit("menu", { what: "open", n: 5 }) }, "Play with friends"),
+      button({ class: "go second", onclick: pw.emit("menu", { what: "open", n: 6 }) }, "Settings"),
     ]),
   ]);
 });

@@ -26,6 +26,7 @@ import "./systems/kart";
 import "./systems/tyres";
 import "./systems/dust";
 import "./systems/laps";
+import "./systems/stats";
 import "./systems/chase_camera";
 import "./systems/views";
 import "./systems/dev_view";

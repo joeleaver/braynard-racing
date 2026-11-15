@@ -10,9 +10,13 @@
 //   loadout   { racer, karts: { racer: { parts, attachments, paint } } }
 //   settings  { audio: { bus: volume }, graphics: { … }, access: { … }, game: { … } } (controls: the engine's rebinding)
 //   where     { x, y, z, heading }: the last safe spot in the player's own county
-//   stats     { played, driven, longestDrift }
+//   stats     { played (s), driven (m), longestDrift (s), longestAir (s), drifts, turbos, respawns }
+//   journal   { tracked: quest id or "", quests: { id: { step, done } }, rumours: [ids] }
 
-export const SAVE_VERSION = 1;
+export const SAVE_VERSION = 2;
+
+/** The fun stats the Scrapbook shows, and what each starts at. More join as their features do (tomato hits, honks, near misses). */
+export const FRESH_STATS = { played: 0, driven: 0, longestDrift: 0, longestAir: 0, drifts: 0, turbos: 0, respawns: 0 };
 
 /** What a new save starts with. */
 export const FRESH = {
@@ -21,7 +25,8 @@ export const FRESH = {
   money: 0,
   loadout: { racer: 1, karts: {} },
   settings: { audio: {}, graphics: {}, access: {}, game: {} },
-  stats: { played: 0, driven: 0, longestDrift: 0 },
+  stats: FRESH_STATS,
+  journal: { tracked: "", quests: {}, rumours: [] },
 };
 
 /** Each step brings a save from one version to the next. Add one with each change to the save's shape. */
@@ -29,6 +34,11 @@ const UPGRADES = {
   // 0 → 1: the first versioned save. Today's saves hold only `name`; give them the rest.
   0: (save) => {
     for (const [key, value] of Object.entries(FRESH)) if (save.get(key, null) === null) save.set(key, value);
+  },
+  // 1 → 2: the journal (quests, the tracked one, rumours heard) and more fun stats for the Scrapbook.
+  1: (save) => {
+    if (save.get("journal", null) === null) save.set("journal", FRESH.journal);
+    save.set("stats", { ...FRESH_STATS, ...save.get("stats", {}) });
   },
 };
 

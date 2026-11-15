@@ -16,9 +16,12 @@ const GATE_FOR = 10;
 const GATE_SETTLE = 0.6;
 
 const S = pw.component("seat");
-const f = Object.fromEntries(["gateDone", "gateClock", "menuOpen", "menuPage", "menuHeld", "froze", "scaleBefore", "alone", "placed", "devOpen"].map((n) => [n, S.property(n)]));
+const f = Object.fromEntries(["gateDone", "gateClock", "menuOpen", "menuPage", "menuHeld", "menuSub", "tabHeld", "froze", "scaleBefore", "alone", "placed", "devOpen"].map((n) => [n, S.property(n)]));
 const player = pw.field("controls", "player");
-const a = Object.fromEntries(["menu", "map", "stick", "gas", "brake", "drift"].map((n) => [n, pw.action("drive", n)]));
+const a = Object.fromEntries(["menu", "map", "stick", "gas", "brake", "drift", "rise", "sink"].map((n) => [n, pw.action("drive", n)]));
+/** The tabs, in order (screens/pause.ts draws them): 0 Journal, 1 Map, 2 Scrapbook, 3 Racers, 4 Garage, 5 Friends, 6 Settings, 7 Help, 8 Quit. */
+export const TABS = 9;
+const QUIT = 8;
 
 function open(seat, n, page) {
   if (seat.get(f.menuOpen) === 0) pauseSave.add(n);
@@ -66,6 +69,18 @@ pw.registerSystem("menus", { includeComponents: ["seat", "controls"], events: ["
     }
     seat.set(f.menuHeld, down ? 1 : 0);
 
+    // While it's open, the bumpers (or Q and E) move between the tabs, wrapping round.
+    const next = seat.get(a.rise) === true;
+    const prev = seat.get(a.sink) === true;
+    const held = (next ? 1 : 0) | (prev ? 2 : 0);
+    if (seat.get(f.menuOpen) === 1) {
+      const was = seat.get(f.tabHeld);
+      const page = seat.get(f.menuPage);
+      if (next && !(was & 1)) seat.set(f.menuPage, (page + 1) % TABS);
+      if (prev && !(was & 2)) seat.set(f.menuPage, (page + TABS - 1) % TABS);
+    }
+    seat.set(f.tabHeld, held);
+
     for (const e of events) {
       if (e.seat !== n) continue;
       // Opening the county map from the menu hands over to it (systems/map.ts).
@@ -76,14 +91,15 @@ pw.registerSystem("menus", { includeComponents: ["seat", "controls"], events: ["
         }
         continue;
       }
-      const page = Math.max(0, Math.min(5, Math.round(e.n)));
+      const page = Math.max(0, Math.min(TABS - 1, Math.round(e.n)));
       if (e.what === "continue") seat.set(f.gateDone, 1);
       else if (e.what === "open") open(seat, n, page);
       else if (e.what === "close") seat.set(f.menuOpen, 0);
       else if (e.what === "page") seat.set(f.menuPage, page);
+      else if (e.what === "sub") seat.set(f.menuSub, Math.max(0, Math.min(1, Math.round(e.n))));
       else if (e.what === "quit") {
         saveNow.add(n);
-        seat.set(f.menuPage, 5);
+        seat.set(f.menuPage, QUIT);
       }
     }
 

@@ -6,6 +6,8 @@
 export const LOBBY = 0;
 export const RACING = 1;
 export const RESULTS = 2;
+/** Free roam: the open world, where every player drives their own kart with no lobby (a Free Roam card). */
+export const ROAM = 3;
 
 /** The number of karts on the grid, one for each racer. */
 export const FIELD = 8;
@@ -17,6 +19,31 @@ export const race = {
   backToLobby: false,
   /** Everyone in the lobby has been ready long enough: the race starts this tick (systems/seats.ts). */
   startNow: false,
+  /** This scene is the open world (a Free Roam card): systems/roam.ts. */
+  roam: false,
+};
+
+/** The testing tools this tick (systems/roam.ts, systems/dev.ts, systems/world.ts). */
+export const dev = {
+  /** A Dev Tools card lets players open the dev menu. */
+  enabled: false,
+  /** This scene's name, for Reload scene; empty when the card doesn't say. */
+  scene: "",
+  /** The time of day and the weather, for the menu. */
+  hour: 0,
+  weather: 0,
+  /** Each seat's input to its free camera this tick: { move, look, mouse, rise, fast }. */
+  flying: new Map(),
+  /** Seats whose kart should wait: their menu is open or they fly. */
+  holding: new Set(),
+  /** Karts' last orders this tick, by seat: { to: [x, y, z], heading } from the save or the dev menu. */
+  sends: new Map(),
+  /** Each free camera's place this tick, by seat, for "the kart to the camera". */
+  cameras: new Map(),
+  /** Where each seat's kart is this tick: { at, heading } (systems/dev_hold.ts). */
+  kartAt: new Map(),
+  /** Every Place this tick: { name, kind, at, heading }. */
+  places: [],
 };
 
 /** Each seat in the game this tick, by seat number: whether somebody is there, and what they chose. */

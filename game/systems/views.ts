@@ -2,7 +2,7 @@
 // they are not in, the leader's, through to the results; in the lobby, the scene's own camera on the grid.
 //
 // Runs in `react`, after the cameras have followed their karts.
-import { race, seats, LOBBY } from "./state";
+import { race, seats, LOBBY, ROAM } from "./state";
 
 const targetOf = pw.object("chaseCamera", "target");
 const human = pw.field("kart", "human");
@@ -20,6 +20,7 @@ pw.registerSystem("views", { phase: "react", includeComponents: ["chaseCamera"] 
   for (const [seat, s] of seats) {
     if (!s.here) continue;
     if (race.phase === LOBBY) pw.view.set(seat, null);
+    else if (race.phase === ROAM) pw.view.set(seat, mine.get(seat) ?? null);
     else pw.view.set(seat, mine.get(seat) ?? leader);
   }
 });

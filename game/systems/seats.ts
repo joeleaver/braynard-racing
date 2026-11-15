@@ -39,6 +39,8 @@ pw.registerSystem("seats", { includeComponents: ["seat", "controls"], events: ["
       seat.set(ready, 0);
     }
     seat.set(here, present ? 1 : 0);
+    // In the open world there is no title or lobby to come past: being here is being in.
+    if (present && race.roam) seat.set(entered, 1);
     // The name the player goes by is theirs, in their save: whoever sits here shows theirs.
     const saved = present ? pw.save(seat.get(player)).get("name", "") : "";
     const called = typeof saved === "string" ? saved : "";

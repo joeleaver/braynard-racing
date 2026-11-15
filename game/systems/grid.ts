@@ -6,7 +6,7 @@
 // comes back, they line up again.
 //
 // Runs in `act`, after the race rules, before anyone drives.
-import { race, seats, players, pickOf, LOBBY } from "./state";
+import { race, seats, players, pickOf, LOBBY, ROAM } from "./state";
 import { racer } from "../data/racers";
 import { statsOf } from "../data/handling";
 
@@ -107,6 +107,14 @@ pw.registerSystem("grid", { includeComponents: ["kart", "controls", "rigid_body"
       i += 1;
     }
     return;
+  }
+  // Free roam: each kart belongs to the seat on its Controls card, and that player drives it while they're here.
+  if (race.phase === ROAM) {
+    for (const kart of objects) {
+      const seat = kart.get(player);
+      const drives = seat !== 0 && (seats.get(seat)?.here ?? false) ? seat : 0;
+      if (kart.get(k.human) !== drives) kart.set(k.human, drives);
+    }
   }
   // A player who has gone hands their kart to the game.
   for (const kart of objects) {

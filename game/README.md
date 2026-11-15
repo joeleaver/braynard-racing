@@ -24,6 +24,7 @@ hill, goes light over the crest, drops through an S and rounds a hairpin banked 
 | Steer, throttle, brake / reverse | WASD or the arrows | left stick, right and left triggers |
 | Drift (hold with a direction; let go for a mini-turbo) | Space or Shift | right bumper or B |
 | Back on the road | R | Back |
+| Dev menu (where a Dev Tools card allows it) | backtick or F1 | right-stick press |
 
 The road has surfaces of its own: dirt on the inside of the first right-hander (so the
 kart grips differently on each side), mud on the outside of the climb, ice through the S, sand on the run back
@@ -58,6 +59,16 @@ shortcut across the infield or driving the wrong way doesn't count.
   county show: green boards, the karts on straw, rosettes for who is who). Fonts: Lilita One and Lato (SIL
   Open Font License, in `art/fonts/`). The card pictures are `tools/kart_cards.py` (Blender renders of each
   kart) and `tools/headshots.py` (from each racer's concept).
+- **Free roam and testing tools** (Design, "Game systems", in Pimble): a scene with a Free Roam card on its
+  Race object is the open world. There is no lobby: each player drives the kart on their seat's Controls card
+  from the first tick. `systems/save.ts` and `data/save.ts` keep the player's save (versioned; progress, unlocks,
+  money, loadout, settings, stats) and their last safe spot, saved every 10 seconds on the road and restored when
+  they arrive; guests arrive beside the host. The dev menu (`screens/dev.ts`, `systems/dev_seats.ts`,
+  `dev_hold.ts`, `dev_view.ts`, `world.ts`) goes to any Place marker, flies a free camera, sets the time of day
+  (a Daylight card on the sun), the weather (a Weather card beside the Fog card) and the time scale, restarts,
+  and edits the save. Every action is the `dev` event, so an agent in Play can say it:
+  `playInput say dev {what: "goto", place: "Bridge over the Ring"}`. The Home Farm spike scene is set up
+  with all of these.
 - `components/`: the cards (a kart's stats, its tyres, the camera), with every number tunable in the Inspector.
 - The kart's wheels are separate models made by `tools/split_kart.py` from `art/karts/hettie/kart.glb`.
   The loop's layout is `tools/barnyard_loop.py`: its road and hay walls are Sweeps with square rings (mitred

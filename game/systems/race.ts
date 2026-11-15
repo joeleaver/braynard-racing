@@ -4,7 +4,7 @@
 //
 // Runs in `act` after the seats are counted (systems/race_phase.ts read the phase at the top of the
 // tick), and changes the phase.
-import { race, players, host, LOBBY, RACING, RESULTS } from "./state";
+import { race, players, host, LOBBY, RACING, RESULTS, ROAM } from "./state";
 
 const R = pw.component("race");
 const p = Object.fromEntries(["phase", "host", "firstFinish", "allDone", "clock", "wait"].map((n) => [n, R.property(n)]));
@@ -16,6 +16,13 @@ pw.registerSystem("race rules", { includeComponents: ["race"], events: ["again"]
     r.set(p.host, boss);
     const said = (name) => events.some((e) => e.name === name && e.seat === boss);
     let phase = r.get(p.phase);
+    // The open world has no lobby: free roam from the first tick, and back to it from a scene's old phase.
+    if (race.roam && (phase === LOBBY || phase === RESULTS)) phase = ROAM;
+    if (phase === ROAM) {
+      r.set(p.phase, phase);
+      race.phase = phase;
+      continue;
+    }
     // The seats rule when everyone is ready (systems/seats.ts): the race starts on their word.
     if (phase === LOBBY && race.startNow) {
       phase = RACING;

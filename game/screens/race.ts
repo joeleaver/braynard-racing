@@ -1,9 +1,9 @@
 // The race HUD (Design, "The HUD"): game graphics, four things in the corners and no labels.
 // - Place, bottom right: the biggest thing on screen, in drawn gold numerals.
 // - Lap, bottom left: a chequered flag and the lap in a small slanted capsule.
-// - The field, right: every racer's head on a ring that stands for the lap, placed by how far round
-//   they are (yours ringed gold, other players' blue). It works on any circuit until each track has a
-//   real minimap.
+// - The field, right: the whole race as a straight line, start at the bottom and finish at the top, with
+//   every racer's head placed by how far through the race they are (yours ringed gold, other players'
+//   blue). It needs no map, so it works on any course.
 // - The countdown in the middle, then nothing there but short notices (flipped, finished).
 // Sparks and boosts show at the kart in the world, not here. Speed is off.
 // The numerals are baked sprite sheets until rinch can draw them as CSS (data/hud.ts).
@@ -21,9 +21,10 @@ ${NUMERAL_CSS}
 .flagrow { display: flex; flex-direction: row; flex: 1; }
 .sq { flex: 1; background: #FFFFFF; }
 .sq.k { background: #1A1A1A; }
-.ring { position: absolute; right: 56px; top: 50%; width: 220px; height: 220px; margin-top: -150px; }
-.ringline { position: absolute; left: 14px; top: 14px; width: 192px; height: 192px; border-radius: 96px; border: 12px solid #FFFFFF; box-sizing: border-box; box-shadow: 0 0 0 4px #1E1E1E66, inset 0 0 0 4px #1E1E1E66; }
-.ringstart { position: absolute; left: 104px; top: 6px; width: 12px; height: 28px; border-radius: 3px; background: #1A1A1A; box-shadow: 0 0 0 2px #FFFFFF; }
+.bar { position: absolute; right: 64px; top: 16vh; width: 60px; height: 44vh; }
+.barline { position: absolute; left: 24px; top: 0; width: 12px; height: 100%; border-radius: 6px; background: #FFFFFF; box-shadow: 0 0 0 4px #1E1E1E66; }
+.barlap { position: absolute; left: 18px; width: 24px; height: 5px; margin-top: -2px; border-radius: 3px; background: #1E1E1E99; }
+.barflag { position: absolute; left: 14px; top: -34px; }
 .rhead { position: absolute; width: 36px; height: 36px; margin-left: -18px; margin-top: -18px; border-radius: 18px; border: 3px solid #FFFFFF; box-shadow: 0 4px 6px #0008; overflow: hidden; }
 .rimg { width: 100%; height: 100%; }
 .rhead.fr { border-color: #7DB8FF; }
@@ -39,34 +40,38 @@ const [laps, progress, finished, place, clockOf, startDelay, phase, racerOf, hum
   ["laps", "progress", "finished", "place", "clock", "startDelay", "phase", "racer", "human", "penalty"].map((n) => K.property(n));
 const heads = RACERS.map((r) => pw.image(`${r.name} headshot`));
 const draw = numerals(sheets());
-const RING = { cx: 110, cy: 110, r: 90 };
+const BAR_X = 30;
 
 function flag() {
   const row = (start) => box({ class: "flagrow" }, [0, 1, 2, 3].map((i) => box({ class: (i + start) % 2 ? "sq k" : "sq" }, [])));
   return box({ class: "flag" }, [row(0), row(1), row(0)]);
 }
 
-/** Every racer's head on the lap ring, placed by how far round the lap they are. */
-function ring(karts, me) {
+/**
+ * The whole race as a straight line up the right edge: the start at the bottom, the finish at the top, a
+ * tick for each lap, and every racer's head placed by how far through the race they are, so who's in
+ * front, and by how much, reads at a glance.
+ */
+function raceBar(karts, me) {
+  const total = Math.max(1, karts[0]?.get(laps) ?? 1);
+  const ticks = [...Array(total - 1).keys()].map((i) => box({ class: "barlap", style: `top: ${(1 - (i + 1) / total) * 100}%` }, []));
   const placed = karts.map((k) => {
-    const p = k.get(progress);
-    const round = ((p % 1) + 1) % 1;
-    const a = round * Math.PI * 2;
-    const x = RING.cx + RING.r * Math.sin(a);
-    const y = RING.cy - RING.r * Math.cos(a);
+    const done = Math.max(0, Math.min(1, k.get(progress) / total));
+    // Neighbours nudge left and right so heads in a bunch stay visible; yours stays on the line.
     const who = k.get(human);
+    const x = who === me ? BAR_X : BAR_X + (k.get(place) % 2 === 0 ? -9 : 9);
     const cls = who === me ? "rhead me" : who > 0 ? "rhead fr" : "rhead";
     // Rinch doesn't round an image's own corners, so each head sits in a round box that clips it.
-    return { order: who === me ? 2 : who > 0 ? 1 : 0, el: box({ class: cls, style: `left: ${x}px; top: ${y}px` }, [image(heads[k.get(racerOf) - 1], { class: "rimg" })]) };
+    return { order: who === me ? 2 : who > 0 ? 1 : 0, el: box({ class: cls, style: `left: ${x}px; top: ${(1 - done) * 100}%` }, [image(heads[k.get(racerOf) - 1], { class: "rimg" })]) };
   });
   // Yours drawn last, on top.
   placed.sort((a, b) => a.order - b.order);
-  return box({ class: "ring" }, [box({ class: "ringline" }, []), box({ class: "ringstart" }, []), ...placed.map((p) => p.el)]);
+  return box({ class: "bar" }, [box({ class: "barline" }, []), ...ticks, box({ class: "barflag" }, [flag()]), ...placed.map((p) => p.el)]);
 }
 
 pw.screen("race", { includeComponents: [K], anchor: "fill" }, ({ seat, objects }) => {
   if (objects.length === 0 || objects[0].get(phase) !== 1) return [];
-  const field = ring([...objects], seat.player);
+  const field = raceBar([...objects], seat.player);
   const kart = seat.objects[0];
   if (kart === undefined) {
     return box({ class: "racehud" }, [field, box({ class: "hudbottom" }, [box({ class: "hudpill" }, [label("Race on. You'll race in the next one.")])])]);

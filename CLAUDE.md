@@ -14,8 +14,9 @@ featured and polished, so it sets the quality bar.
   pin to them, in order, to keep going, but never merge them: the Playweft side reviews and merges. Playweft
   sessions may check out, fork or PR from this repo when troubleshooting issues reported in the game.
 - **Art:** `art/` holds sources and approved pieces (`concepts/`, `racers/`, `karts/`, `world/`). Concepts come from
-  oxidegen (through its MCP, with the style guide). Characters, props and scenery are built in hifipushie on
-  Joe's local runners from those concepts, never with oxidegen's mesh generation. Big working files (models, renders, scripts)
+  oxidegen (through its MCP, with the style guide). Characters, props and scenery are built with hifipushie
+  through the oxidegen MCP's sculpt artist on Joe's local runners (`where:"local"`), never hifipushie run
+  directly and never oxidegen's mesh generation. Results go into the oxidegen library and Joe's dailies. Big working files (models, renders, scripts)
   go in `workspace/` (git-ignored).
 - **Project files** (`playweft.json`, `scene.weave` …) are made by the Playweft editor
   (`pw-studio-desktop --new <folder>`), never hand-written.

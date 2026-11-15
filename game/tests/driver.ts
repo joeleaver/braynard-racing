@@ -52,12 +52,16 @@ function headingOf(q) {
 
 /** Start a single-player race in racer `n`'s kart (1 to 8) and wait out the countdown. */
 export function startRace(game, n) {
+  // A seat counts as taken once its player's controls read something.
+  game.hold(1, "drive", "stick", [0, 0]);
+  game.run(2);
   game.say(1, "enter", {});
   game.run(3);
   game.say(1, "pick", { racer: n });
   game.run(3);
-  game.say(1, "start", {});
-  game.run(3.2 * TICKS);
+  // Ready: the race starts three seconds after everyone is, then counts down three more.
+  game.say(1, "ready", {});
+  game.run(6.4 * TICKS);
 }
 
 /**

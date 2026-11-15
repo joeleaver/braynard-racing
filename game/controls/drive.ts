@@ -8,6 +8,8 @@ pw.defineControls("drive", {
   brake: pw.axis(["pad:left-trigger"]),
   drift: pw.button(["key:space", "key:shift", "pad:right-bumper", "pad:b"]),
   respawn: pw.button(["key:r", "pad:back"]),
+  // The pause menu (systems/menu.ts).
+  menu: pw.button(["key:escape", "key:p", "pad:start"]),
   // Testing: the dev menu, and the free camera it flies (systems/dev.ts).
   dev: pw.button(["key:`", "key:f1", "pad:right-stick-press"]),
   look: pw.stick(["pad:right-stick"]),

@@ -11,7 +11,7 @@
 // The arrival runs in `act`, before the karts drive; the spots in `react`, after the laps are counted.
 import { race, dev, seats, host, ROAM } from "./state";
 import { upgrade, spotOf, keepSpot } from "../data/save";
-import { startOf, headingOf, saveNow } from "./dev_seats";
+import { startOf, headingOf, saveNow, pauseSave } from "./dev_seats";
 
 /** Seconds of safe driving between saved spots. */
 const SPOT_EVERY = 10;
@@ -77,7 +77,8 @@ pw.registerSystem("spots", { phase: "react", includeComponents: ["seat", "contro
     }
     if (n !== boss || !kart.safe) continue;
     const t = seat.get(f.spotClock) + dt;
-    if (t >= SPOT_EVERY) {
+    // Every 10 seconds of safe driving, and whenever the pause menu opens.
+    if (t >= SPOT_EVERY || pauseSave.has(n)) {
       keepSpot(n, kart.at, kart.heading);
       seat.set(f.spotClock, 0);
     } else seat.set(f.spotClock, t);

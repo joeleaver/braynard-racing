@@ -16,6 +16,7 @@ import "./systems/race";
 import "./systems/grid";
 import "./systems/dev_seats";
 import "./systems/save";
+import "./systems/menu";
 import "./systems/world";
 import "./systems/driver";
 import "./systems/rivals";

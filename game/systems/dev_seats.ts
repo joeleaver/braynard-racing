@@ -24,6 +24,7 @@ export function headingOf(q) {
 // Every Place in the scene, for the menu's Go to page and for where a new player starts.
 pw.registerSystem("places", { includeComponents: ["place"] }, ({ objects }) => {
   saveNow.clear();
+  pauseSave.clear();
   for (const o of objects) dev.places.push({ name: o.get(placeName) ?? "", kind: o.get(placeKind), at: o.get(position), heading: headingOf(o.get(rotation)) });
 });
 
@@ -104,6 +105,8 @@ pw.registerSystem("dev seats", { includeComponents: ["seat", "controls"], events
 
 /** Seats that asked for their spot to be saved this tick (systems/save.ts saves it after physics). */
 export const saveNow = new Set();
+/** Seats that opened the pause menu this tick: their spot is saved if it's a safe one (systems/save.ts). */
+export const pauseSave = new Set();
 
 /** Where a new player starts: the first Place of kind 2, else the first Place, else nowhere. */
 export function startOf() {

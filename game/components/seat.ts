@@ -20,6 +20,16 @@ pw.defineComponent("seat", {
   seeWeather: pw.int(0, { group: "Dev", doc: "The weather, copied here for the dev menu." }),
   seeScale: pw.float(1, { group: "Dev", doc: "The time scale, copied here for the dev menu." }),
 
+  // The front gate card and the pause menu (systems/menu.ts, screens/gate.ts, screens/pause.ts).
+  gateDone: pw.int(0, { group: "Menu", doc: "1 once this player has dismissed the front gate card this visit." }),
+  gateClock: pw.float(0, { group: "Menu", doc: "Seconds the front gate card has been up." }),
+  menuOpen: pw.int(0, { group: "Menu", doc: "1 while this player has the pause menu open." }),
+  menuPage: pw.int(0, { group: "Menu", doc: "The pause menu's page: 0 Map, 1 Friends, 2 Garage, 3 Settings, 4 Help, 5 Quit." }),
+  menuHeld: pw.int(0, { group: "Menu", doc: "1 while the menu button is held, so a press toggles it once." }),
+  froze: pw.int(0, { group: "Menu", doc: "1 while this player's pause menu has frozen the game (they are alone in it)." }),
+  scaleBefore: pw.float(1, { group: "Menu", doc: "The time scale before the pause menu froze it, to put back." }),
+  alone: pw.int(1, { group: "Menu", doc: "1 while this player is the only one in the game, copied here for the screens." }),
+
   // The save (systems/save.ts).
   placed: pw.int(0, { group: "Save", doc: "1 once this player has been put at their saved spot (or beside the host) this run." }),
   spotClock: pw.float(0, { group: "Save", doc: "Seconds of safe driving since their spot was last saved." }),

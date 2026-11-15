@@ -67,5 +67,7 @@ pw.defineComponent("seat", {
   placed: pw.int(0, { group: "Save", doc: "1 once this player has been put at their saved spot (or beside the host) this run." }),
   spotClock: pw.float(0, { group: "Save", doc: "Seconds of safe driving since their spot was last saved." }),
   money: pw.int(0, { group: "Save", doc: "Their money, copied from their save for the screens." }),
+  moneyFlash: pw.float(0, { group: "Save", unit: "s", doc: "Seconds left showing money on the HUD after it changed." }),
+  moneyDelta: pw.int(0, { group: "Save", doc: "How much it changed by, for the HUD." }),
   spotSaved: pw.int(0, { group: "Save", doc: "1 while their save holds a spot in the world." }),
 });

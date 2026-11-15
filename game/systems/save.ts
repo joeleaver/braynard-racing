@@ -17,7 +17,9 @@ import { startOf, headingOf, saveNow, pauseSave } from "./dev_seats";
 const SPOT_EVERY = 10;
 
 const S = pw.component("seat");
-const f = Object.fromEntries(["placed", "spotClock", "money", "spotSaved"].map((n) => [n, S.property(n)]));
+const f = Object.fromEntries(["placed", "spotClock", "money", "spotSaved", "moneyFlash", "moneyDelta"].map((n) => [n, S.property(n)]));
+/** How long money shows on the HUD after it changes, in seconds. */
+const MONEY_SHOWS = 4;
 const player = pw.field("controls", "player");
 
 pw.registerSystem("arrivals", { includeComponents: ["seat", "controls"] }, ({ objects }) => {
@@ -30,7 +32,14 @@ pw.registerSystem("arrivals", { includeComponents: ["seat", "controls"] }, ({ ob
       continue;
     }
     const save = upgrade(n);
-    seat.set(f.money, save.get("money", 0));
+    // Money shows on the HUD for a few seconds when it changes (not on arrival).
+    const money = save.get("money", 0);
+    const was = seat.get(f.money);
+    if (money !== was && seat.get(f.placed) === 1) {
+      seat.set(f.moneyDelta, money - was);
+      seat.set(f.moneyFlash, MONEY_SHOWS);
+    } else seat.set(f.moneyFlash, Math.max(0, seat.get(f.moneyFlash) - objects.dt));
+    seat.set(f.money, money);
     seat.set(f.spotSaved, spotOf(n) === null ? 0 : 1);
     if (race.phase !== ROAM || seat.get(f.placed) === 1) continue;
     seat.set(f.placed, 1);

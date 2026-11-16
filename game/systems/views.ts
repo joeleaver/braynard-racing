@@ -13,7 +13,8 @@ pw.registerSystem("views", { phase: "react", includeComponents: ["chaseCamera"] 
   let leader = null;
   for (const cam of objects) {
     const kart = cam.get(targetOf);
-    if (kart === null || !kart.exists) continue;
+    // In the open world each player has a camera per kart; only the switched-on kart's counts.
+    if (kart === null || !kart.exists || !kart.active) continue;
     if (kart.get(human) !== 0) mine.set(kart.get(human), cam);
     if (kart.get(place) === 1) leader = cam;
   }

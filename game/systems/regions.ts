@@ -4,6 +4,7 @@
 //
 // Runs in `react`, after physics, where the karts have moved.
 import { race, seats, ROAM } from "./state";
+import { drivenKart } from "./players";
 
 /** How long a region's name stays on the HUD after you drive in, in seconds. */
 const NAME_SHOWS = 4;
@@ -50,14 +51,13 @@ export function regionAt(x, z) {
 const S = pw.component("seat");
 const regionOf = S.text("region");
 const shows = S.property("regionShow");
-const kartOf = pw.object("seat", "kart");
 const player = pw.field("controls", "player");
 const position = pw.vec3("transform", "position");
 
 pw.registerSystem("regions", { phase: "react", includeComponents: ["seat", "controls"] }, ({ objects }) => {
   const dt = objects.dt;
   for (const seat of objects) {
-    const kart = seat.get(kartOf);
+    const kart = drivenKart(seat);
     const here = seats.get(seat.get(player))?.here ?? false;
     if (race.phase !== ROAM || !here || kart === null || !kart.exists || !kart.active) {
       if ((seat.get(regionOf) ?? "") !== "") seat.set(regionOf, "");

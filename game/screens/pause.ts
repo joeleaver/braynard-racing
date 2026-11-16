@@ -50,6 +50,10 @@ styles(`
 .racers { display: flex; flex-direction: row; flex-wrap: wrap; gap: 12px; }
 .racer { width: 23%; display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 12px 8px; border-radius: 12px; background: #24552E; }
 .racer.locked { opacity: 0.45; }
+.racer.on { background: #FFC531; box-shadow: 0 4px 0 #B07F12; }
+.racer.on .racername { color: #1D4426; }
+.drive { border: 0; border-radius: 999px; padding: 5px 16px; font-size: 15px; background: #FFFBF2; color: #1D4426; }
+.drive.on { background: #1D4426; color: #FFC531; }
 .kind, .booktext, .bookh, .num, .cap, .ptitle, .ptext, .pdim, .pkey, .racername { display: block; }
 .col, .col > * { color: #2A2A22; }
 
@@ -85,7 +89,7 @@ styles(`
 
 const S = pw.component("seat");
 const f = Object.fromEntries(
-  ["menuOpen", "menuPage", "menuSub", "setSub", "opts", "confirmClear", "froze", "money", "statPlayed", "statDriven", "statBestDrift", "statBestAir", "statDrifts", "statTurbos", "eggs", "racerBits", "here"].map((n) => [n, S.property(n)]),
+  ["menuOpen", "menuPage", "menuSub", "setSub", "opts", "confirmClear", "froze", "money", "statPlayed", "statDriven", "statBestDrift", "statBestAir", "statDrifts", "statTurbos", "eggs", "racerBits", "here", "racer"].map((n) => [n, S.property(n)]),
 );
 const nameOf = S.text("name");
 const bindText = Object.fromEntries(["stick", "gas", "brake", "drift", "respawn", "menu", "map"].map((a) => [a, S.text(`bind${a[0].toUpperCase()}${a.slice(1)}`)]));
@@ -162,15 +166,20 @@ function scrapbook(me) {
   ]);
 }
 
+// Pick who you drive in the county: an unlocked racer's card says "menu" with what "racer"
+// (systems/players.ts keeps it in the loadout and swaps your kart).
 function racers(me) {
+  const driving = me.get(f.racer);
   return box({ class: "board sheet" }, [
     label({ class: "ptitle" }, "Racers"),
-    box({ class: "racers" }, RACERS.map((r, i) => {
+    box({ class: "racers", focus: "group" }, RACERS.map((r, i) => {
       const open = ((me.get(f.racerBits) >> i) & 1) === 1;
-      return box({ class: open ? "racer" : "racer locked" }, [
-        image(heads[i], { class: "racerhead" }),
-        label({ class: "racername" }, r.name),
-        label({ class: "pdim" }, open ? "Ready to race" : "Beat their club"),
+      const mine = driving === i + 1;
+      const card = [image(heads[i], { class: "racerhead" }), label({ class: "racername" }, r.name)];
+      if (!open) return box({ class: "racer locked" }, [...card, label({ class: "pdim" }, "Beat their club")]);
+      return box({ class: mine ? "racer on" : "racer" }, [
+        ...card,
+        button({ class: mine ? "drive on" : "drive", onclick: say("racer", i + 1), ...(mine ? { focus: "first" } : {}) }, mine ? "Driving" : "Drive"),
       ]);
     })),
   ]);

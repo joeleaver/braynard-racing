@@ -15,7 +15,7 @@ ${NUMERAL_CSS}
 `);
 
 const S = pw.component("seat");
-const [money, flash, delta, phase, regionShow] = ["money", "moneyFlash", "moneyDelta", "phase", "regionShow"].map((n) => S.property(n));
+const [money, flash, delta, phase, regionShow, menuOpen, gateDone] = ["money", "moneyFlash", "moneyDelta", "phase", "regionShow", "menuOpen", "gateDone"].map((n) => S.property(n));
 const regionOf = S.text("region");
 const player = pw.field("controls", "player");
 const draw = numerals(sheets());
@@ -36,6 +36,6 @@ pw.screen("roam hud", { includeComponents: [S], anchor: "top-right", margin: 28 
 // stroke text (data/hud.ts): the baked numerals have no full alphabet.
 pw.screen("roam region", { includeComponents: [S], anchor: "bottom-left", margin: 40 }, ({ seat, objects }) => {
   const me = objects.find((o) => o.get(player) === seat.player);
-  if (me === undefined || me.get(phase) !== ROAM || me.get(regionShow) <= 0) return [];
+  if (me === undefined || me.get(phase) !== ROAM || me.get(regionShow) <= 0 || me.get(menuOpen) === 1 || me.get(gateDone) !== 1) return [];
   return label({ class: "regionname" }, me.get(regionOf) ?? "");
 });

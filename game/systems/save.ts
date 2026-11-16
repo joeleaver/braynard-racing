@@ -16,6 +16,7 @@ import { race, dev, seats, host, ROAM } from "./state";
 import { upgrade, spotOf, keepSpot } from "../data/save";
 import { startOf, headingOf, saveNow, pauseSave } from "./dev_seats";
 import { regionAt } from "./regions";
+import { drivenKart } from "./players";
 
 /** Seconds of safe driving between saved spots. */
 const SPOT_EVERY = 10;
@@ -25,7 +26,6 @@ const f = Object.fromEntries(["placed", "spotClock", "money", "spotSaved", "mone
 /** How long money shows on the HUD after it changes, in seconds. */
 const MONEY_SHOWS = 4;
 const player = pw.field("controls", "player");
-const kartOf = pw.object("seat", "kart");
 /** Where guests arrive around the host, in metres to the host's right and behind them, in arrival order. */
 const AROUND = [[2.5, 0], [-2.5, 0], [0, 4.5], [2.5, 4.5], [-2.5, 4.5], [0, 9], [2.5, 9]];
 
@@ -55,7 +55,7 @@ pw.registerSystem("arrivals", { includeComponents: ["seat", "controls"] }, ({ ob
     if (n !== boss) guests += 1;
     if (seat.get(f.placed) === 1) continue;
     // A kart switched on this tick joins the world's sets at the tick's end: place it the tick after.
-    const kart = seat.get(kartOf);
+    const kart = drivenKart(seat);
     if (kart !== null && kart.exists && seat.get(f.kartOn) < 2) continue;
     if (n === boss) {
       const spot = spotOf(n) ?? startOf();

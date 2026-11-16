@@ -5,6 +5,7 @@
 //
 // Runs in `act`, after the menus and before systems/dev_hold.ts, which holds the karts.
 import { race, dev, seats, ROAM } from "./state";
+import { drivenKart } from "./players";
 
 /** Below this speed a kart counts as stopped, in metres a second. */
 const STOPPED = 1;
@@ -27,7 +28,6 @@ pw.registerSystem("pull-up places", { includeComponents: ["pull_up"] }, ({ objec
 const S = pw.component("seat");
 const f = Object.fromEntries(["placeNear", "placeOpen", "placeKind", "placeStill", "placeDone", "menuOpen", "devOpen", "gateDone"].map((n) => [n, S.property(n)]));
 const placeName = S.text("placeName");
-const kartOf = pw.object("seat", "kart");
 const player = pw.field("controls", "player");
 const speed = pw.field("kart", "speed");
 
@@ -35,7 +35,7 @@ pw.registerSystem("pull-ups", { includeComponents: ["seat", "controls"], events:
   const dt = objects.dt;
   for (const seat of objects) {
     const n = seat.get(player);
-    const kart = seat.get(kartOf);
+    const kart = drivenKart(seat);
     const here = seats.get(n)?.here ?? false;
     if (race.phase !== ROAM || !here || kart === null || !kart.exists || !kart.active) {
       for (const k of ["placeNear", "placeOpen", "placeStill", "placeDone"]) seat.set(f[k], 0);

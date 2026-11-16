@@ -16,6 +16,12 @@ pw.registerSystem("chase camera", { phase: "react", includeComponents: ["chaseCa
   for (const cam of objects) {
     const kart = cam.get(targetOf);
     if (kart === null || !kart.exists) continue;
+    // A switched-off kart (an open-world player's other racers, an empty seat's) needs no camera; when
+    // it comes on, its camera starts behind it rather than swinging in from where it last was.
+    if (!kart.active) {
+      if (cam.get(R.placed) !== 0) cam.set(R.placed, 0);
+      continue;
+    }
     const g = (n) => cam.get(R[n]);
     const at = kart.get(position);
     const nose = pw.rotateVector([0, 0, -1], kart.get(rotation));

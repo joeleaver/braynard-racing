@@ -1,7 +1,7 @@
 // The dev menu: testing tools for building the county (Design, "Game systems" → "Testing tools").
 // Backtick, F1 or the right-stick press opens and closes it, where a Dev Tools card allows it. Five
 // pages: Go to (every Place, listed by the screen below), World (time of day, weather, time scale),
-// Camera (the free camera), Restart, Save. Every button says the "dev" event, which an agent in Play can
+// Camera (the free camera), Restart, Save, Spawn (any blueprint, in front of your kart). Every button says the "dev" event, which an agent in Play can
 // say directly. Plain styling for now: this is a tool, not the game's face.
 import { box, label, button, styles } from "@pw/ui";
 
@@ -22,10 +22,11 @@ styles(`
 `);
 
 const S = pw.component("seat");
-const f = Object.fromEntries(["devOpen", "devPage", "devOk", "fly", "seeHour", "seeWeather", "seeScale", "money", "spotSaved", "host"].map((n) => [n, S.property(n)]));
+const f = Object.fromEntries(["devOpen", "devPage", "devOk", "fly", "seeHour", "seeWeather", "seeScale", "money", "spotSaved", "host", "devListMore"].map((n) => [n, S.property(n)]));
 const player = pw.field("controls", "player");
+const devList = S.text("devList");
 
-const PAGES = ["Go to", "World", "Camera", "Restart", "Save"];
+const PAGES = ["Go to", "World", "Camera", "Restart", "Save", "Spawn"];
 const HOURS = [[6, "Dawn"], [9, "Morning"], [12, "Noon"], [16.5, "Afternoon"], [19.5, "Dusk"], [23, "Night"]];
 const WEATHER = ["Clear", "Overcast", "Fog"];
 const SCALES = [[0, "Frozen"], [0.25, "¼"], [0.5, "½"], [1, "1×"], [2, "2×"]];
@@ -76,6 +77,15 @@ pw.screen("dev", { includeComponents: [S], anchor: "top-right" }, ({ seat, objec
       label({ class: "devhead" }, me.get(f.spotSaved) === 1 ? "A spot is saved." : "No spot saved yet."),
       box({ class: "devrow" }, [btn("Save this spot", "spot"), btn("Clear my save", "clear")]),
       label({ class: "devnote" }, "Your spot saves itself every 10 seconds of driving on the road."),
+    ];
+  } else if (page === 5) {
+    // The blueprints' names, written onto the seat by systems/dev_seats.ts (screens can't list them).
+    const names = (me.get(devList) ?? "").split("\n").filter((n) => n !== "");
+    const more = me.get(f.devListMore);
+    body = [
+      box({ class: "devrow" }, names.map((name, i) => btn(name, "spawn", { place: name }, false, i === 0))),
+      ...(more > 0 ? [label({ class: "devnote" }, `And ${more} more that don't fit here: an agent can say "dev" with what "spawn" and the name.`)] : []),
+      label({ class: "devnote" }, names.length === 0 ? "This project has no blueprints yet." : "Placed on the ground in front of your kart. Reload the scene to clear them."),
     ];
   }
   return box({ class: "devmenu" }, [label({ class: "devtitle" }, "Dev menu"), tabs, ...body, btn("Close", "close")]);

@@ -18,4 +18,5 @@ pw.registerSystem("race phase", { includeComponents: ["race"] }, ({ objects }) =
   dev.cameras.clear();
   dev.kartAt.clear();
   dev.places = [];
+  dev.spawns = [];
 });

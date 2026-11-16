@@ -14,7 +14,9 @@ pw.defineComponent("seat", {
 
   // The dev menu (systems/dev.ts, screens/dev.ts).
   devOpen: pw.int(0, { group: "Dev", doc: "1 while this player has the dev menu open." }),
-  devPage: pw.int(0, { group: "Dev", doc: "The dev menu's page: 0 Go to, 1 World, 2 Camera, 3 Restart, 4 Save." }),
+  devPage: pw.int(0, { group: "Dev", doc: "The dev menu's page: 0 Go to, 1 World, 2 Camera, 3 Restart, 4 Save, 5 Spawn." }),
+  devList: pw.text("", { group: "Dev", doc: "The project's blueprints for the dev menu's Spawn page, one name a line, as many as fit (systems/dev_seats.ts)." }),
+  devListMore: pw.int(0, { group: "Dev", doc: "How many blueprints didn't fit in devList." }),
   devHeld: pw.int(0, { group: "Dev", doc: "1 while the dev menu's button is held, so a press toggles it once." }),
   devOk: pw.int(0, { group: "Dev", doc: "1 when this scene lets players open the dev menu (a Dev Tools card), copied here for the screens." }),
   fly: pw.int(0, { group: "Dev", doc: "1 while this player flies their free camera." }),

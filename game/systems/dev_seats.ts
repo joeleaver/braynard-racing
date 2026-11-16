@@ -35,7 +35,30 @@ pw.registerSystem("free camera places", { includeComponents: ["freeCamera"] }, (
 });
 
 const S = pw.component("seat");
-const f = Object.fromEntries(["devOpen", "devPage", "devHeld", "devOk", "fly", "placed"].map((n) => [n, S.property(n)]));
+const f = Object.fromEntries(["devOpen", "devPage", "devHeld", "devOk", "fly", "placed", "devListMore"].map((n) => [n, S.property(n)]));
+const devList = S.text("devList");
+
+/** A string's length in UTF-8 bytes, as a text field counts it. */
+const bytes = (s) => [...s].reduce((n, ch) => { const c = ch.codePointAt(0); return n + (c < 0x80 ? 1 : c < 0x800 ? 2 : c < 0x10000 ? 3 : 4); }, 0);
+
+/**
+ * The project's blueprints by name, as many as fit in a seat's text (256 bytes), for the Spawn page;
+ * screens can't read the blueprint list themselves. Fixed for the run.
+ */
+/** Blueprints the Spawn page leaves out: the player rig (a second one would be a second seat for a player). */
+const NOT_SPAWNABLE = ["Player 1"];
+const SPAWNABLE = (() => {
+  const names = [...new Set(pw_blueprints().map((b) => b.name))].filter((n) => !NOT_SPAWNABLE.includes(n)).sort();
+  let text = "";
+  let fit = 0;
+  for (const name of names) {
+    const next = text === "" ? name : `${text}\n${name}`;
+    if (bytes(next) > 250) break;
+    text = next;
+    fit += 1;
+  }
+  return { text, more: names.length - fit };
+})();
 const player = pw.field("controls", "player");
 const a = Object.fromEntries(["dev", "stick", "look", "mouse", "rise", "sink", "drift"].map((n) => [n, pw.action("drive", n)]));
 
@@ -53,13 +76,15 @@ pw.registerSystem("dev seats", { includeComponents: ["seat", "controls"], events
     const down = seat.get(a.dev) === true;
     if (down && seat.get(f.devHeld) === 0) seat.set(f.devOpen, seat.get(f.devOpen) === 1 ? 0 : 1);
     seat.set(f.devHeld, down ? 1 : 0);
+    if (seat.get(devList) !== SPAWNABLE.text) seat.set(devList, SPAWNABLE.text);
+    seat.set(f.devListMore, SPAWNABLE.more);
 
     for (const e of events) {
       if (e.seat !== n) continue;
       const what = e.what;
       if (what === "open") seat.set(f.devOpen, 1);
       else if (what === "close") seat.set(f.devOpen, 0);
-      else if (what === "page") seat.set(f.devPage, Math.max(0, Math.min(4, Math.round(e.n))));
+      else if (what === "page") seat.set(f.devPage, Math.max(0, Math.min(5, Math.round(e.n))));
       else if (what === "fly") {
         const on = e.n !== 0 && dev.cameras.has(n);
         seat.set(f.fly, on ? 1 : 0);
@@ -78,6 +103,8 @@ pw.registerSystem("dev seats", { includeComponents: ["seat", "controls"], events
         if (spot !== null) dev.sends.set(n, { to: [spot.x, spot.y, spot.z], heading: spot.heading });
       } else if (what === "reload" && dev.scene !== "") {
         pw.changeScene(dev.scene);
+      } else if (what === "spawn" && e.place !== "") {
+        dev.spawns.push({ seat: n, name: e.place });
       } else if (what === "money") addMoney(n, e.n);
       else if (what === "unlock") unlockAll(n);
       // Where the kart is now is known after physics: systems/save.ts saves it then.

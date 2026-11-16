@@ -1,6 +1,7 @@
 // Karts and the testing tools: a kart whose player has the dev menu open, or is flying their free
-// camera, waits (no throttle, no steering); and a kart sent somewhere — by the dev menu, or by the save
-// on arrival (systems/save.ts) — is put there, facing the way it should, at rest.
+// camera, waits (no throttle, no steering); a kart sent somewhere — by the dev menu, or by the save
+// on arrival (systems/save.ts) — is put there, facing the way it should, at rest; and a blueprint
+// picked on the dev menu's Spawn page is placed on the ground in front of that player's kart.
 //
 // Runs in `act`, after the drivers ask and before the kart turns the asks into driving.
 import { dev } from "./state";
@@ -16,6 +17,8 @@ const rotation = pw.quat("transform", "rotation");
 
 /** How high above the ground a sent kart is dropped, so its wheels settle onto it. */
 const LIFT = 0.6;
+/** How far in front of the kart a spawned blueprint stands, in metres. */
+const AHEAD = 7;
 
 pw.registerSystem("dev hold", { includeComponents: ["kart", "controls", "rigid_body"] }, ({ objects, physics }) => {
   // Where each seat's kart is now, for a player arriving beside another.
@@ -24,6 +27,17 @@ pw.registerSystem("dev hold", { includeComponents: ["kart", "controls", "rigid_b
     at.set(kart.get(player), kart.get(position));
     const nose = pw.rotateVector([0, 0, -1], kart.get(rotation));
     dev.kartAt.set(kart.get(player), { at: kart.get(position), heading: Math.atan2(-nose[0], -nose[2]) });
+  }
+
+  // The Spawn page: on the ground a few metres ahead of the kart (a blueprint stands where it is placed,
+  // turned as it was saved).
+  for (const s of dev.spawns) {
+    const kart = dev.kartAt.get(s.seat);
+    if (kart === undefined) continue;
+    const ahead = [kart.at[0] - Math.sin(kart.heading) * AHEAD, kart.at[2] - Math.cos(kart.heading) * AHEAD];
+    const hit = physics.ray([ahead[0], kart.at[1] + 5, ahead[1]], [0, -1, 0], 20);
+    const y = hit !== null ? hit.point[1] : kart.at[1];
+    pw.spawn(pw.blueprint(s.name), { position: { x: ahead[0], y, z: ahead[1] } });
   }
 
   for (const kart of objects) {

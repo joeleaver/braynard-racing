@@ -38,6 +38,8 @@ export const dev = {
   holding: new Set(),
   /** Karts' last orders this tick, by seat: { to: [x, y, z], heading } from the save or the dev menu. */
   sends: new Map(),
+  /** Blueprints to place this tick, from the dev menu's Spawn page: { seat, name }, in front of that seat's kart. */
+  spawns: [],
   /** Each free camera's place this tick, by seat, for "the kart to the camera". */
   cameras: new Map(),
   /** Where each seat's kart is this tick: { at, heading } (systems/dev_hold.ts). */

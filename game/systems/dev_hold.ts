@@ -42,13 +42,16 @@ pw.registerSystem("dev hold", { includeComponents: ["kart", "controls", "rigid_b
     let to = send.to;
     let heading = send.heading ?? 0;
     if (send.beside !== undefined) {
-      // Beside another player's kart: four metres to its right, facing the same way.
+      // Beside another player's kart, facing the same way: `offset` metres to its right and behind it
+      // (four to the right if not given).
       const there = at.get(send.beside);
       if (there === undefined) continue;
-      const other = objects.find((o) => o.get(player) === send.beside);
+      const other = [...objects].find((o) => o.get(player) === send.beside);
       const q = other === undefined ? [0, 0, 0, 1] : other.get(rotation);
       const right = pw.rotateVector([1, 0, 0], q);
-      to = [there[0] + right[0] * 4, there[1], there[2] + right[2] * 4];
+      const back = pw.rotateVector([0, 0, 1], q);
+      const [r, b] = send.offset ?? [4, 0];
+      to = [there[0] + right[0] * r + back[0] * b, there[1], there[2] + right[2] * r + back[2] * b];
       const nose = pw.rotateVector([0, 0, -1], q);
       heading = Math.atan2(-nose[0], -nose[2]);
     }

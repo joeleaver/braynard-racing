@@ -3,7 +3,10 @@
 //
 // - Arriving: a player's save is brought up to date (data/save.ts), and in free roam the host (the
 //   county's owner) is put back at their last safe spot, or at the start for a new player. Everyone
-//   else arrives beside the host. systems/dev_hold.ts moves the karts.
+//   else arrives around the host once the host is placed: either side, then a row behind, and so on.
+//   A player is placed once their kart is switched on (systems/players.ts); systems/dev_hold.ts moves
+//   the karts. A guest who becomes the host (the host left) stays where they are and starts saving
+//   their own spot from there.
 // - Driving: every 10 seconds of safe driving in free roam (on the ground, upright, something solid
 //   under the wheels) the host's spot is saved. Only the host's: a guest's spot belongs to their own
 //   county.
@@ -17,13 +20,19 @@ import { startOf, headingOf, saveNow, pauseSave } from "./dev_seats";
 const SPOT_EVERY = 10;
 
 const S = pw.component("seat");
-const f = Object.fromEntries(["placed", "spotClock", "money", "spotSaved", "moneyFlash", "moneyDelta"].map((n) => [n, S.property(n)]));
+const f = Object.fromEntries(["placed", "spotClock", "money", "spotSaved", "moneyFlash", "moneyDelta", "kartOn"].map((n) => [n, S.property(n)]));
 /** How long money shows on the HUD after it changes, in seconds. */
 const MONEY_SHOWS = 4;
 const player = pw.field("controls", "player");
+const kartOf = pw.object("seat", "kart");
+/** Where guests arrive around the host, in metres to the host's right and behind them, in arrival order. */
+const AROUND = [[2.5, 0], [-2.5, 0], [0, 4.5], [2.5, 4.5], [-2.5, 4.5], [0, 9], [2.5, 9]];
 
 pw.registerSystem("arrivals", { includeComponents: ["seat", "controls"] }, ({ objects }) => {
   const boss = host();
+  // Guests wait until the host's kart has been put in place (a tick earlier), so they arrive around it.
+  const bossPlaced = [...objects].some((s) => s.get(player) === boss && s.get(f.placed) === 1);
+  let guests = 0;
   for (const seat of objects) {
     const n = seat.get(player);
     if (!(seats.get(n)?.here ?? false)) {
@@ -41,12 +50,18 @@ pw.registerSystem("arrivals", { includeComponents: ["seat", "controls"] }, ({ ob
     } else seat.set(f.moneyFlash, Math.max(0, seat.get(f.moneyFlash) - objects.dt));
     seat.set(f.money, money);
     seat.set(f.spotSaved, spotOf(n) === null ? 0 : 1);
-    if (race.phase !== ROAM || seat.get(f.placed) === 1) continue;
-    seat.set(f.placed, 1);
+    if (race.phase !== ROAM) continue;
+    if (n !== boss) guests += 1;
+    if (seat.get(f.placed) === 1) continue;
+    // A kart switched on this tick joins the world's sets at the tick's end: place it the tick after.
+    const kart = seat.get(kartOf);
+    if (kart !== null && kart.exists && seat.get(f.kartOn) < 2) continue;
     if (n === boss) {
       const spot = spotOf(n) ?? startOf();
       if (spot !== null) dev.sends.set(n, { to: [spot.x, spot.y, spot.z], heading: spot.heading });
-    } else dev.sends.set(n, { beside: boss });
+    } else if (bossPlaced) dev.sends.set(n, { beside: boss, offset: AROUND[(guests - 1) % AROUND.length] });
+    else continue;
+    seat.set(f.placed, 1);
   }
 });
 

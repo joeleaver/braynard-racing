@@ -53,6 +53,9 @@ styles(`
 .kind, .booktext, .bookh, .num, .cap, .ptitle, .ptext, .pdim, .pkey, .racername { display: block; }
 .col, .col > * { color: #2A2A22; }
 
+.who { display: flex; flex-direction: column; gap: 6px; margin: 10px 0; }
+.whorow { display: flex; flex-direction: row; align-items: center; gap: 12px; padding: 8px 14px; border-radius: 10px; background: #24552E; }
+.whoname { display: block; font-family: ${display}; font-size: 20px; color: #FFFBF2; }
 .setrow { display: flex; flex-direction: row; gap: 22px; }
 .setnav { display: flex; flex-direction: column; gap: 6px; width: 170px; }
 .setnav .sub { text-align: left; font-size: 16px; padding: 8px 14px; }
@@ -82,8 +85,9 @@ styles(`
 
 const S = pw.component("seat");
 const f = Object.fromEntries(
-  ["menuOpen", "menuPage", "menuSub", "setSub", "opts", "confirmClear", "froze", "money", "statPlayed", "statDriven", "statBestDrift", "statBestAir", "statDrifts", "statTurbos", "eggs", "racerBits"].map((n) => [n, S.property(n)]),
+  ["menuOpen", "menuPage", "menuSub", "setSub", "opts", "confirmClear", "froze", "money", "statPlayed", "statDriven", "statBestDrift", "statBestAir", "statDrifts", "statTurbos", "eggs", "racerBits", "here"].map((n) => [n, S.property(n)]),
 );
+const nameOf = S.text("name");
 const bindText = Object.fromEntries(["stick", "gas", "brake", "drift", "respawn", "menu", "map"].map((a) => [a, S.text(`bind${a[0].toUpperCase()}${a.slice(1)}`)]));
 const player = pw.field("controls", "player");
 const heads = RACERS.map((r) => pw.image(`${r.name} headshot`));
@@ -172,11 +176,23 @@ function racers(me) {
   ]);
 }
 
-function friends(net, typed) {
+/** Who's in the county: everyone here, lowest seat first. The lowest seat is the host, whose county it is. */
+function whoIsHere(seats, mine) {
+  const here = seats.filter((s) => s.get(f.here) === 1).sort((a, b) => a.get(player) - b.get(player));
+  return box({ class: "who" }, here.map((s, i) => {
+    const n = s.get(player);
+    const name = s.get(nameOf) || `Player ${n}`;
+    const tags = [n === mine ? "you" : "", i === 0 ? "host" : ""].filter((t) => t !== "").join(" · ");
+    return box({ class: "whorow" }, [label({ class: "whoname" }, name), label({ class: "pdim" }, tags)]);
+  }));
+}
+
+function friends(net, typed, seats, mine) {
   const shared = net.joined || net.hosting;
   const rows = [label({ class: "ptitle" }, "Friends")];
   if (shared) {
-    rows.push(label({ class: "ptext" }, net.hosting ? `Your county is open · ${net.taken} here` : `In a friend's county · ${net.taken} here`));
+    rows.push(label({ class: "ptext" }, net.hosting ? `Your county is open · ${net.taken} of 8 here` : `In a friend's county · ${net.taken} of 8 here`));
+    rows.push(whoIsHere(seats, mine));
     if (net.address !== "") rows.push(label({ class: "pdim" }, `Invite link: ${net.address}`));
     rows.push(box({ class: "prow" }, [button({ class: "go second", onclick: pw.emit("net.leave") }, net.hosting ? "Close my county" : "Back to my county")]));
   } else {
@@ -310,13 +326,13 @@ function settings(me, volume, quality, typed) {
   ]);
 }
 
-function tab(n, me, net, typed, volume, quality) {
+function tab(n, me, net, typed, volume, quality, seats) {
   if (n === 0) return journal(me);
   if (n === 1) return sheet("Map", [label({ class: "ptext" }, "The whole county: tracks, jobs, friends and where you've been.")], [button({ class: "go", onclick: pw.emit("map", { what: "open" }) }, "Open the map")]);
   if (n === 2) return scrapbook(me);
   if (n === 3) return racers(me);
   if (n === 4) return sheet("Garage", [label({ class: "ptext" }, "Your barn at Home Farm: kart parts, paint and your trophies. Coming soon.")]);
-  if (n === 5) return friends(net, typed);
+  if (n === 5) return friends(net, typed, seats, me.get(player));
   if (n === 6) return settings(me, volume, quality, typed);
   if (n === HELP) return sheet("Help", KEYS.map(([what, keys]) => label({ class: "pkey" }, `${what}: ${keys}`)));
   return sheet("Quit", [label({ class: "ptext" }, "Your spot and everything you've earned are saved. Close the game whenever you like.")], [button({ class: "go", onclick: say("close") }, "Keep playing")]);
@@ -335,5 +351,5 @@ pw.screen("pause", { includeComponents: [S], anchor: "fill" }, ({ seat, objects,
   ]);
   const note = label({ class: "pdim" }, me.get(f.froze) === 1 ? "Paused. Saved a moment ago." : "The county keeps going while you're here.");
   const big = (me.get(f.opts) & 4) !== 0;
-  return box({ class: big ? "pause big" : "pause" }, [tabs, box({ class: "body" }, [tab(current, me, net, typed, volume, quality)]), note]);
+  return box({ class: big ? "pause big" : "pause" }, [tabs, box({ class: "body" }, [tab(current, me, net, typed, volume, quality, [...objects])]), note]);
 });

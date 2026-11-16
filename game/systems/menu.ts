@@ -16,7 +16,7 @@ const GATE_FOR = 10;
 const GATE_SETTLE = 0.6;
 
 const S = pw.component("seat");
-const f = Object.fromEntries(["gateDone", "gateClock", "menuOpen", "menuPage", "menuHeld", "menuSub", "tabHeld", "froze", "scaleBefore", "alone", "placed", "devOpen"].map((n) => [n, S.property(n)]));
+const f = Object.fromEntries(["gateDone", "gateClock", "menuOpen", "menuPage", "menuHeld", "menuSub", "tabHeld", "froze", "scaleBefore", "alone", "placed", "devOpen", "placeOpen", "placeDone"].map((n) => [n, S.property(n)]));
 const player = pw.field("controls", "player");
 const a = Object.fromEntries(["menu", "map", "stick", "gas", "brake", "drift", "rise", "sink"].map((n) => [n, pw.action("drive", n)]));
 /** The tabs, in order (screens/pause.ts draws them): 0 Journal, 1 Map, 2 Scrapbook, 3 Racers, 4 Garage, 5 Friends, 6 Settings, 7 Help, 8 Quit. */
@@ -61,10 +61,16 @@ pw.registerSystem("menus", { includeComponents: ["seat", "controls"], events: ["
       if (t >= GATE_FOR || (t >= GATE_SETTLE && driving) || seat.get(a.map) === true) seat.set(f.gateDone, 1);
     }
 
-    // The menu button: a press opens or closes the pause menu (it closes the dev menu first if that's open).
+    // The menu button: a press opens or closes the pause menu (it leaves a place's board, or does nothing
+    // while the dev menu is open, first).
     const down = seat.get(a.menu) === true;
     if (down && seat.get(f.menuHeld) === 0) {
       if (seat.get(f.menuOpen) === 1) seat.set(f.menuOpen, 0);
+      // At a place you pulled up to, the menu button leaves its board first (systems/pull_ups.ts).
+      else if (seat.get(f.placeOpen) === 1) {
+        seat.set(f.placeOpen, 0);
+        seat.set(f.placeDone, 1);
+      }
       else if (seat.get(f.devOpen) !== 1) open(seat, n, 0);
     }
     seat.set(f.menuHeld, down ? 1 : 0);

@@ -1,0 +1,16 @@
+{
+  "game": "braynard-racing",
+  "title": "Braynard Racing",
+  "channel_url": "https://braynard-racing.jkbase.app/releases",
+  "channel": "stable",
+  "public_key": "546174ab082486e9ada73da563f8a7a7b5314f5e9c823934e1978586e495c845",
+  "look": {
+    "background": "#2a1d14",
+    "panel": "#3b2a1d",
+    "text": "#fdf3e1",
+    "accent": "#e8a73a",
+    "accent_text": "#2a1d14",
+    "banner": "banner.jpg",
+    "tagline": "Kart racing across the county, on four legs and two."
+  }
+}

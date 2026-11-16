@@ -15,6 +15,7 @@
 import { race, dev, seats, host, ROAM } from "./state";
 import { upgrade, spotOf, keepSpot } from "../data/save";
 import { startOf, headingOf, saveNow, pauseSave } from "./dev_seats";
+import { regionAt } from "./regions";
 
 /** Seconds of safe driving between saved spots. */
 const SPOT_EVERY = 10;
@@ -95,7 +96,7 @@ pw.registerSystem("spots", { phase: "react", includeComponents: ["seat", "contro
     const kart = standing.get(n);
     if (kart === undefined) continue;
     if (saveNow.has(n)) {
-      keepSpot(n, kart.at, kart.heading);
+      keepSpot(n, kart.at, kart.heading, regionAt(kart.at[0], kart.at[2]));
       seat.set(f.spotClock, 0);
       continue;
     }
@@ -103,7 +104,7 @@ pw.registerSystem("spots", { phase: "react", includeComponents: ["seat", "contro
     const t = seat.get(f.spotClock) + dt;
     // Every 10 seconds of safe driving, and whenever the pause menu opens.
     if (t >= SPOT_EVERY || pauseSave.has(n)) {
-      keepSpot(n, kart.at, kart.heading);
+      keepSpot(n, kart.at, kart.heading, regionAt(kart.at[0], kart.at[2]));
       seat.set(f.spotClock, 0);
     } else seat.set(f.spotClock, t);
   }

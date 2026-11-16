@@ -9,7 +9,7 @@
 //   money     a whole number
 //   loadout   { racer, karts: { racer: { parts, attachments, paint } } }
 //   settings  { audio: { bus: volume }, graphics: { … }, access: { … }, game: { … } } (controls: the engine's rebinding)
-//   where     { x, y, z, heading }: the last safe spot in the player's own county
+//   where     { x, y, z, heading, region }: the last safe spot in the player's own county, and the region it is in
 //   stats     { played (s), driven (m), longestDrift (s), longestAir (s), drifts, turbos, respawns }
 //   journal   { tracked: quest id or "", quests: { id: { step, done } }, rumours: [ids] }
 
@@ -61,9 +61,9 @@ export function spotOf(seat) {
 }
 
 /** Keep a spot as the player's last safe one. */
-export function keepSpot(seat, at, heading) {
+export function keepSpot(seat, at, heading, region = "") {
   const r = (v) => Math.round(v * 100) / 100;
-  pw.save(seat).set("where", { x: r(at[0]), y: r(at[1]), z: r(at[2]), heading: r(heading) });
+  pw.save(seat).set("where", { x: r(at[0]), y: r(at[1]), z: r(at[2]), heading: r(heading), region });
 }
 
 /** Add to (or, below 0, take from) the player's money; it never goes below 0. */

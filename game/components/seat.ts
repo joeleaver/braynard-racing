@@ -3,6 +3,8 @@
 pw.defineComponent("seat", {
   here: pw.int(0, { doc: "1 while a player is on this seat." }),
   kart: pw.object({ doc: "In the open world, this seat's own kart: switched on while a player is here, off while the seat is empty (systems/players.ts)." }),
+  region: pw.text("", { doc: "In the open world, the region this player is driving in, \"\" between regions (systems/regions.ts)." }),
+  regionShow: pw.float(0, { unit: "s", doc: "Seconds the region's name stays on the HUD, from driving in." }),
   kartOn: pw.int(0, { doc: "Ticks this seat's kart has been switched on, up to 2: it can be placed from the tick after it comes on (systems/save.ts)." }),
   entered: pw.int(0, { doc: "1 once they are past the title screen." }),
   picked: pw.int(0, { doc: "The racer they picked, 1 to 8 as on a kart's card; 0 for none yet." }),

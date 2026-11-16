@@ -25,7 +25,7 @@ pw.registerSystem("pull-up places", { includeComponents: ["pull_up"] }, ({ objec
 });
 
 const S = pw.component("seat");
-const f = Object.fromEntries(["placeNear", "placeOpen", "placeKind", "placeStill", "placeDone", "menuOpen", "devOpen"].map((n) => [n, S.property(n)]));
+const f = Object.fromEntries(["placeNear", "placeOpen", "placeKind", "placeStill", "placeDone", "menuOpen", "devOpen", "gateDone"].map((n) => [n, S.property(n)]));
 const placeName = S.text("placeName");
 const kartOf = pw.object("seat", "kart");
 const player = pw.field("controls", "player");
@@ -64,8 +64,8 @@ pw.registerSystem("pull-ups", { includeComponents: ["seat", "controls"], events:
       seat.set(f.placeOpen, 0);
       seat.set(f.placeDone, 1);
     }
-    // Stood still for a moment, with no other menu open: the board opens.
-    const busy = seat.get(f.menuOpen) === 1 || seat.get(f.devOpen) === 1;
+    // Stood still for a moment, with no other menu or the front gate card up: the board opens.
+    const busy = seat.get(f.menuOpen) === 1 || seat.get(f.devOpen) === 1 || seat.get(f.gateDone) !== 1;
     const still = Math.abs(kart.get(speed)) < STOPPED ? seat.get(f.placeStill) + dt : 0;
     seat.set(f.placeStill, still);
     if (seat.get(f.placeOpen) === 0 && seat.get(f.placeDone) === 0 && !busy && still >= SETTLE) seat.set(f.placeOpen, 1);

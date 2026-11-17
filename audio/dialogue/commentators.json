@@ -138,7 +138,7 @@
     "Kart's going one way, driver's going the other!"
    ],
    "drift_boost": [
-    "Look at that drift! I used to do that. Better, mind.",
+    "Look at that drift! I used to do that. Better, mind you!",
     "Sparks everywhere! Gorgeous!"
    ],
    "last_lap": [
@@ -182,7 +182,7 @@
    "drift_boost": {
     "direction": "a loud, brassy former racer turned commentator in an animated kart-racing game, admiring a drift and boasting",
     "lines": [
-     "Look at that <emphasis>drift</emphasis>! I used to do that. <emphasis>Better</emphasis>, mind.",
+     "Look at that <emphasis>drift</emphasis>! I used to do that. Better, mind you!",
      "Sparks <emphasis>everywhere</emphasis>! <emphasis>Gorgeous</emphasis>!"
     ]
    },
@@ -291,7 +291,7 @@
     "lines": [
      {
       "who": "penny",
-      "line": "Look at that drift! I used to do that. Better, mind."
+      "line": "Look at that drift! I used to do that. Better, mind you!"
      },
      {
       "who": "barnaby",
@@ -452,8 +452,8 @@
     "lines": [
      {
       "who": "penny",
-      "direction": "a loud, brassy former racer turned commentator in an animated kart-racing game, admiring a drift and boasting",
-      "line": "Look at that <emphasis>drift</emphasis>! I used to do that. <emphasis>Better</emphasis>, mind."
+      "direction": "a loud, brassy former racer turned commentator in an animated kart-racing game, admiring a drift, then a cheeky little brag",
+      "line": "Look at that <emphasis>drift</emphasis>! I used to do that. Better, mind you!"
      },
      {
       "who": "barnaby",

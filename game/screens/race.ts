@@ -6,10 +6,10 @@
 //   blue). It needs no map, so it works on any course.
 // - The countdown in the middle, then nothing there but short notices (flipped, finished).
 // Sparks and boosts show at the kart in the world, not here. Speed is off.
-// The numerals are baked sprite sheets until rinch can draw them as CSS (data/hud.ts).
+// The numerals are drawn with CSS (data/hud.ts).
 import { box, label, image, styles } from "@pw/ui";
 import { RACERS } from "../data/racers";
-import { sheets, numerals, ordinal, NUMERAL_CSS } from "../data/hud";
+import { numerals, ordinal, NUMERAL_CSS } from "../data/hud";
 
 const display = pw.font("Lilita One");
 styles(`
@@ -39,7 +39,7 @@ const K = pw.component("kart");
 const [laps, progress, finished, place, clockOf, startDelay, phase, racerOf, human, penalty] =
   ["laps", "progress", "finished", "place", "clock", "startDelay", "phase", "racer", "human", "penalty"].map((n) => K.property(n));
 const heads = RACERS.map((r) => pw.image(`${r.name} headshot`));
-const draw = numerals(sheets());
+const draw = numerals();
 const BAR_X = 30;
 
 function flag() {

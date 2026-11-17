@@ -41,6 +41,7 @@ pw.defineComponent("kart", {
   airDamp: stat(120, "N·m·s", "In the air, how much its tumbling is slowed."),
   turnGrip: stat(14, "m/s²", "The sideways pull the tyres hold in a turn: the hardest a kart that is not drifting is let turn."),
   wheelbase: stat(0.82, "m", "From the front wheels to the back: how fast a steer turns the kart."),
+  wheelSteerLock: stat(0, "°", "How far the front wheel models are drawn turned at most, so they don't pass through the body; the steering itself isn't limited (systems/front_tyres.ts). 0 for no limit."),
   rollTilt: stat(73, "°", "Tipped further than this from upright, the kart is rolled (on its side or its roof)."),
   rollAfter: stat(1, "s", "How long it must stay rolled before it counts, so a tumble that lands on its wheels does not."),
   rollPenalty: stat(2.5, "s", "How long a rolled kart waits before it is put back on the road."),

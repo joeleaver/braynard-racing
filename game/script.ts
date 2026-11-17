@@ -31,6 +31,7 @@ import "./systems/dust";
 import "./systems/laps";
 import "./systems/regions";
 import "./systems/stats";
+import "./systems/front_tyres";
 import "./systems/chase_camera";
 import "./systems/views";
 import "./systems/dev_view";

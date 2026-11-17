@@ -1,0 +1,83 @@
+{
+ "_about": "Easy Earl, K-CORN 98.7 \"Fresh Country\" (new country). Same shape as racers.json: reference = calm neutral lines for the voice's long reference; links = the DJ's lines between songs, by kind; performed = the same links marked up for Drama 3 with a voice-actor direction each.",
+ "name": "Easy Earl",
+ "animal": "Mule",
+ "station": "K-CORN 98.7, Fresh Country",
+ "brief": "smooth, kind mule hosting a country radio show: a deep, velvety Southern American bass-baritone, slow and warm, honey-smooth, gentle and reassuring, a smile in every word",
+ "audition": "Well, hey there, friend. You're listening to K-Corn ninety-eight point seven, Fresh Country. Pull over somewhere pretty, and let's talk a while.",
+ "pronounce": {
+  "K-CORN": "Kay Corn"
+ },
+ "reference": [
+  "Evening, friend. This is Earl. I've been keeping the county company on the radio for a good long while now.",
+  "The studio's out back of the feed store. It's small, but the chair's comfortable.",
+  "I read every letter that comes in. Even the ones written in crayon.",
+  "My mama was a horse and my daddy was a donkey, so I've always seen both sides of things.",
+  "A good song is like a good friend. It doesn't hurry you.",
+  "I take my coffee black, and I take my evenings slow.",
+  "Some of the racers write in, you know. I won't say which ones.",
+  "The orchard road is the prettiest drive in the county, round about sunset.",
+  "I keep a corn cob on the desk for luck. It's been there longer than I have.",
+  "Folks call in with their troubles, and mostly they just need somebody to listen.",
+  "When it rains, I play the sad ones. When it stops, I play the happy ones.",
+  "All right, then. Kettle's on, letters are open. Let's see who's written in tonight."
+ ],
+ "links": {
+  "station_intro": [
+   "Well, hey there, friend. This is Easy Earl, on K-Corn ninety-eight point seven, Fresh Country. Ease off that throttle a little."
+  ],
+  "listener_letter": [
+   "Got a letter here. It says, Dear Earl, my friend keeps overtaking me on the last lap, and never waits for me. Signed, Worried Hen. Well, Worried Hen. Maybe stop waiting for folks, and start passing them. This one's for you. Second Place Heart."
+  ],
+  "advice": [
+   "Here's something I learned the hard way. If somebody cares about you, they'll wait for you at the finish line. And if they don't, well. That's what the next song's for. Here's Salt Marsh Sunset."
+  ],
+  "weather": [
+   "Bit of rain coming in over the orchard tonight, so if you're driving, take it slow. Slow is how the good things happen."
+  ],
+  "racing_report_intro": [
+   "Now let's hand on over to our friends up in the blimp. Barnaby, Penny, the county's all yours."
+  ],
+  "back_announce": [
+   "That was Hometown Champion, requested once again by a certain horse. Third time today, Max. We heard you, friend."
+  ]
+ },
+ "performed": {
+  "station_intro": {
+   "direction": "a smooth, kind late-night country radio host in an animated game, slow, warm and intimate, smiling",
+   "lines": [
+    "Well, hey there, <emphasis>friend</emphasis>. This is Easy Earl, on K-Corn ninety-eight point seven, <emphasis>Fresh Country</emphasis>. <slow>Ease off that throttle a little.</slow>"
+   ]
+  },
+  "listener_letter": {
+   "direction": "a smooth, kind late-night country radio host in an animated game, reading a listener's letter fondly, then giving gentle advice",
+   "lines": [
+    "Got a letter here. It says, Dear Earl, my friend keeps overtaking me on the <emphasis>last lap</emphasis>, and <emphasis>never</emphasis> waits for me. Signed, Worried Hen. [pause] Well, Worried Hen. Maybe stop <emphasis>waiting</emphasis> for folks, and start <emphasis>passing</emphasis> them. This one's for you. <slow>Second Place Heart.</slow>"
+   ]
+  },
+  "advice": {
+   "direction": "a smooth, kind late-night country radio host in an animated game, tender, wise, a little wistful",
+   "lines": [
+    "Here's something I learned the <emphasis>hard</emphasis> way. If somebody cares about you, they'll <emphasis>wait</emphasis> for you at the finish line. [pause] And if they don't, well. [small laugh] That's what the <emphasis>next song's</emphasis> for. Here's <slow>Salt Marsh Sunset.</slow>"
+   ]
+  },
+  "weather": {
+   "direction": "a smooth, kind late-night country radio host in an animated game, gentle and reassuring weather read",
+   "lines": [
+    "Bit of <emphasis>rain</emphasis> coming in over the orchard tonight, so if you're driving, take it <emphasis>slow</emphasis>. <slow>Slow is how the good things happen.</slow>"
+   ]
+  },
+  "racing_report_intro": {
+   "direction": "a smooth, kind late-night country radio host in an animated game, warm easy hand-over",
+   "lines": [
+    "Now let's hand on over to our friends up in the <emphasis>blimp</emphasis>. Barnaby, Penny, the county's <emphasis>all yours</emphasis>."
+   ]
+  },
+  "back_announce": {
+   "direction": "a smooth, kind late-night country radio host in an animated game, gently amused, back-announcing a track with a fond little dig",
+   "lines": [
+    "That was <emphasis>Hometown Champion</emphasis>, requested once <emphasis>again</emphasis> by a certain horse. [small laugh] <emphasis>Third</emphasis> time today, Max. We heard you, friend."
+   ]
+  }
+ }
+}

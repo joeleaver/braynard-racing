@@ -1,0 +1,25 @@
+{
+ "_about": "A sample of \"The Racing Report\", carried by all three stations, with Barnaby and Penny from the blimp. Lines in order (who + line), then the performed versions marked up for Drama 3 with a direction each. Voices: commentators.json. In the game, results, places and records come from the game's state through name and place slots; this sample speaks them in full.",
+ "sample": [
+  {"who": "barnaby", "line": "This is the Racing Report, from the Braynard Blimp. I'm Barnaby Hoot."},
+  {"who": "penny", "line": "And I'm Penny Speckle! We're over the cornfields this afternoon, aren't we, Barnaby?"},
+  {"who": "barnaby", "line": "We are. Today's Home Farm Cup went to Maximillian Gallop, for the third week running."},
+  {"who": "penny", "line": "Third! Somebody needs to take that horse down a peg. Hettie came second, and laid two eggs on the podium."},
+  {"who": "barnaby", "line": "Next up is the Sawmill Run, at six this evening. We'll be drifting over the woods to have a look."},
+  {"who": "penny", "line": "And a little rumour for you. I swear I saw something shiny under the Mill River bridge. Just saying."},
+  {"who": "barnaby", "line": "Records. Someone flew sixty metres off the quarry this morning. Not recommended."},
+  {"who": "penny", "line": "Recommended! Highly recommended!"},
+  {"who": "barnaby", "line": "That's the Racing Report. Back to the music."}
+ ],
+ "performed": [
+  {"who": "barnaby", "direction": "a dry, precise old radio newsreader opening a bulletin in an animated game, crisp and measured", "line": "This is the <emphasis>Racing Report</emphasis>, from the Braynard Blimp. I'm Barnaby Hoot."},
+  {"who": "penny", "direction": "a loud, brassy, cheerful co-host in an animated game, bursting in with energy", "line": "And I'm Penny <emphasis>Speckle</emphasis>! We're over the <emphasis>cornfields</emphasis> this afternoon, aren't we, Barnaby?"},
+  {"who": "barnaby", "direction": "a dry, precise old radio newsreader in an animated game, reading results, faintly weary", "line": "We are. Today's Home Farm Cup went to Maximillian Gallop, for the <emphasis>third</emphasis> week running."},
+  {"who": "penny", "direction": "a loud, brassy co-host in an animated game, outraged then laughing", "line": "<emphasis>Third</emphasis>! Somebody needs to take that horse down a <emphasis>peg</emphasis>. Hettie came second, and laid <emphasis>two eggs</emphasis> on the podium. [laugh]"},
+  {"who": "barnaby", "direction": "a dry, precise old radio newsreader in an animated game, reading what's coming up", "line": "Next up is the <emphasis>Sawmill Run</emphasis>, at six this evening. We'll be drifting over the woods to have a look."},
+  {"who": "penny", "direction": "a loud, brassy co-host in an animated game, dropping to a conspiratorial stage whisper for a rumour", "line": "And a little <emphasis>rumour</emphasis> for you. <whisper>I swear I saw something shiny under the Mill River bridge.</whisper> Just saying."},
+  {"who": "barnaby", "direction": "a dry, precise old radio newsreader in an animated game, deadpan disapproval", "line": "Records. Someone flew <emphasis>sixty metres</emphasis> off the quarry this morning. [pause] Not <emphasis>recommended</emphasis>."},
+  {"who": "penny", "direction": "a loud, brassy co-host in an animated game, gleefully contradicting him", "line": "<emphasis>Recommended</emphasis>! <emphasis>Highly</emphasis> recommended!"},
+  {"who": "barnaby", "direction": "a dry, precise old radio newsreader in an animated game, briskly signing off", "line": "That's the Racing Report. Back to the <emphasis>music</emphasis>."}
+ ]
+}

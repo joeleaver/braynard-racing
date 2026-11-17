@@ -1,0 +1,92 @@
+{
+ "_about": "DJ Strut, BPM 104.1 \"Barn Party Music\" (techno-country). Same shape as racers.json: reference = calm neutral lines for the voice's long reference; links = the DJ's lines between songs, by kind; performed = the same links marked up for Drama 3 with a voice-actor direction each.",
+ "name": "DJ Strut",
+ "animal": "Peacock",
+ "station": "BPM 104.1, Barn Party Music",
+ "brief": "flashy peacock radio DJ on a techno-country party station: a young American man's bright, punchy hype-man voice, high energy, big grin, rapid-fire radio patter with a little Southern twang, everything is the best thing ever",
+ "audition": "Yeah! BPM one oh four point one, Barn Party Music! We are locked in at one hundred and twenty-eight beats per minute, and that is a fact!",
+ "pronounce": {
+  "BPM": "B P M"
+ },
+ "reference": [
+  "Hey, it's Strut. I do the afternoon show on BPM, and most of the evening one too.",
+  "The studio's in the hayloft over the old dance barn. You can feel the bass through the floor.",
+  "I wear the shades indoors because the disco ball is honestly very bright.",
+  "Every song we play is somewhere between one twenty and one forty beats per minute.",
+  "I keep a little metronome on the desk. It's gold, obviously.",
+  "My tail takes about twenty minutes to fold up after a show.",
+  "The races use our music too, so if you hear us on the track, that's us.",
+  "I've met every racer in the county. Max tips well. The Major does not.",
+  "On a quiet night I play the slow ones. Only one or two, though.",
+  "The Pit Stop sends over toasties at six. That's the best part of the day.",
+  "Most of my mail is song requests. Some of it is about my feathers.",
+  "Okay. Headphones on, lights up, let's keep the county moving."
+ ],
+ "links": {
+  "station_intro": [
+   "Yeah! BPM one oh four point one, Barn Party Music! It's DJ Strut, and that last track, Hay Bale Hyperdrive? Best song ever made. Until this one!"
+  ],
+  "bpm_countdown": [
+   "We are cruising at one twenty-eight beats per minute. Let's take it to one thirty! One thirty-two! One thirty-five! Whoa, too far. Back to one twenty-eight. Here's Barn Door Breakdown!"
+  ],
+  "traffic": [
+   "Traffic and travel, Strut style! Landslide on the Pass road, so go round it. Or go over it. I'm not your mum!"
+  ],
+  "joke": [
+   "Why did the tractor go to the party? It heard there'd be loads of torque! Ha! I'm here all week, Braynard!"
+  ],
+  "racing_report_intro": [
+   "Shades down, feathers up! It's time for the Racing Report, with Barnaby and Penny, live from the blimp! Hit it!"
+  ],
+  "advert_outro": [
+   "This hour of Barn Party Music comes to you from the Pit Stop! Tyres, toasties and tow ropes. Strut approved! Keep it loud!"
+  ],
+  "track_intro": [
+   "Mabel, this one's for you! It's Cowbell Overload, and the cowbell count today is: infinite!"
+  ]
+ },
+ "performed": {
+  "station_intro": {
+   "direction": "a flashy, hyped-up party radio DJ in an animated game, grinning, rapid-fire, maximum energy",
+   "lines": [
+    "<emphasis>Yeah</emphasis>! BPM one oh four point one, <emphasis>Barn Party Music</emphasis>! It's DJ <emphasis>Strut</emphasis>, and that last track, <emphasis>Hay Bale Hyperdrive</emphasis>? <emphasis>Best</emphasis> song ever made. [pause] Until <emphasis>this</emphasis> one!"
+   ]
+  },
+  "bpm_countdown": {
+   "direction": "a flashy party radio DJ in an animated game, building hype faster and faster, then snapping back sheepish",
+   "lines": [
+    "We are cruising at one twenty-<emphasis>eight</emphasis> beats per minute. Let's take it to one <emphasis>thirty</emphasis>! One thirty-<emphasis>two</emphasis>! One thirty-<emphasis>five</emphasis>! [pause] Whoa, too far. [small laugh] Back to one twenty-eight. Here's <emphasis>Barn Door Breakdown</emphasis>!"
+   ]
+  },
+  "traffic": {
+   "direction": "a flashy party radio DJ in an animated game, cheeky, fast, doing the travel news like a hype man",
+   "lines": [
+    "Traffic and travel, <emphasis>Strut</emphasis> style! Landslide on the Pass road, so go <emphasis>round</emphasis> it. Or go <emphasis>over</emphasis> it. I'm not your <emphasis>mum</emphasis>!"
+   ]
+  },
+  "joke": {
+   "direction": "a flashy party radio DJ in an animated game, telling a terrible joke and laughing at it himself",
+   "lines": [
+    "Why did the tractor go to the party? [pause] It heard there'd be loads of <emphasis>torque</emphasis>! [laugh] I'm here all <emphasis>week</emphasis>, Braynard!"
+   ]
+  },
+  "racing_report_intro": {
+   "direction": "a flashy party radio DJ in an animated game, big fanfare hype, handing over to the news",
+   "lines": [
+    "Shades <emphasis>down</emphasis>, feathers <emphasis>up</emphasis>! It's time for the <emphasis>Racing Report</emphasis>, with Barnaby and Penny, <emphasis>live</emphasis> from the blimp! Hit it!"
+   ]
+  },
+  "advert_outro": {
+   "direction": "a flashy party radio DJ in an animated game, slick, punchy ad read, all smiles",
+   "lines": [
+    "This hour of Barn Party Music comes to you from the <emphasis>Pit Stop</emphasis>! Tyres, toasties and tow ropes. <emphasis>Strut</emphasis> approved! Keep it <emphasis>loud</emphasis>!"
+   ]
+  },
+  "track_intro": {
+   "direction": "a flashy, hyped-up party radio DJ in an animated game, dedicating a track, shouting it out over the intro",
+   "lines": [
+    "<emphasis>Mabel</emphasis>, this one's for <emphasis>you</emphasis>! It's <emphasis>Cowbell Overload</emphasis>, and the cowbell count today is: [pause] <emphasis>infinite</emphasis>!"
+   ]
+  }
+ }
+}

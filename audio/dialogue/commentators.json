@@ -1,0 +1,532 @@
+{
+ "_about": "Dialogue for the Braynard Blimp's commentators, in the same shape as racers.json. reference: calm, neutral lines read once to build the voice's long reference (no shouting, whispers or vocal events). callouts: race lines by moment, for each commentator alone. double_act: race calls as short exchanges between the two, by moment (who + line, in order). performed: the same lines marked up for Drama 3 (<emphasis> on the stressed words, [cues] where they happen), with a voice-actor direction per moment. Racer names are spoken in full here; the game version records the lines with name slots. The Racing Report lives in radio/racing_report.json.",
+ "barnaby": {
+  "name": "Barnaby Hoot",
+  "animal": "Barn Owl",
+  "brief": "dry old barn owl who calls the race: an older English man's light, reedy tenor, crisp and precise like a veteran cricket commentator, bone-dry understatement, faintly weary, never raises his voice more than he must",
+  "audition": "Good afternoon from high above Braynard County. Eight karts on the grid, a light westerly breeze, and, regrettably, broad daylight. Let's get on with it.",
+  "reference": [
+   "Good afternoon. I've been calling races over this county for longer than most of these karts have had wheels.",
+   "The gondola is a converted garden shed. It has a desk, two chairs, a kettle and a very good view.",
+   "I keep every lap record in a ledger. Some of the older ones are still in pencil.",
+   "The Mill River bridge is the narrowest point on the Home Farm circuit. It's worth remembering.",
+   "I much prefer the evening races. The light is kinder, and the karts are easier to tell apart.",
+   "Penny raced for eleven seasons. She will tell you it was twelve.",
+   "From up here you can see the whole county, from the quarry all the way down to the coast.",
+   "The blimp travels at about twelve metres a second, which is to say, not quickly.",
+   "A good race call is mostly a matter of knowing when to say nothing at all.",
+   "The geraniums in the window boxes are Penny's. I'm told I'm not to touch them.",
+   "We moor at the County Fair overnight. The mast creaks a little, but it holds.",
+   "Right then. Notes in order, pencil sharpened. We're ready when they are."
+  ],
+  "callouts": {
+   "race_start": [
+    "Lights are on. And they're away.",
+    "And we're racing. More or less in a straight line."
+   ],
+   "overtake": [
+    "Through on the inside. Neatly done.",
+    "A change of position, and not before time."
+   ],
+   "item_hit": [
+    "Struck amidships. That will smart.",
+    "And something has landed on somebody. Again."
+   ],
+   "crash": [
+    "Off the road and into the hedge. The hedge appears to have won.",
+    "That kart is now facing the wrong way, and so, I suspect, is its driver."
+   ],
+   "last_lap": [
+    "Last lap. Do try to keep it on the tarmac.",
+    "One lap remaining. Pencils ready."
+   ],
+   "record": [
+    "That is a new lap record. I shall have to use ink.",
+    "A record. I'll need a fresh page."
+   ],
+   "finish": [
+    "And across the line. That's the race.",
+    "The chequered flag, and a result I shall have to write down."
+   ]
+  },
+  "performed": {
+   "race_start": {
+    "direction": "a dry, weary old race commentator in an animated kart-racing game, crisp and understated, calling the start",
+    "lines": [
+     "Lights are on. [pause] And they're <emphasis>away</emphasis>.",
+     "And we're <emphasis>racing</emphasis>. More or less in a <emphasis>straight</emphasis> line."
+    ]
+   },
+   "overtake": {
+    "direction": "a dry, weary old race commentator in an animated kart-racing game, crisp and understated, calling an overtake",
+    "lines": [
+     "Through on the <emphasis>inside</emphasis>. Neatly done.",
+     "A change of position, and not before <emphasis>time</emphasis>."
+    ]
+   },
+   "item_hit": {
+    "direction": "a dry, weary old race commentator in an animated kart-racing game, bone-dry, wincing slightly",
+    "lines": [
+     "Struck <emphasis>amidships</emphasis>. That will <emphasis>smart</emphasis>.",
+     "And something has landed on somebody. [sigh] <emphasis>Again</emphasis>."
+    ]
+   },
+   "crash": {
+    "direction": "a dry, weary old race commentator in an animated kart-racing game, deadpan about a crash",
+    "lines": [
+     "Off the road and into the hedge. The <emphasis>hedge</emphasis> appears to have won.",
+     "That kart is now facing the <emphasis>wrong</emphasis> way, and so, I suspect, is its <emphasis>driver</emphasis>."
+    ]
+   },
+   "last_lap": {
+    "direction": "a dry, weary old race commentator in an animated kart-racing game, a touch more alert for the final lap",
+    "lines": [
+     "<emphasis>Last</emphasis> lap. Do try to keep it on the <emphasis>tarmac</emphasis>.",
+     "One lap remaining. Pencils <emphasis>ready</emphasis>."
+    ]
+   },
+   "record": {
+    "direction": "a dry, weary old race commentator in an animated kart-racing game, quietly impressed despite himself",
+    "lines": [
+     "That is a new lap <emphasis>record</emphasis>. I shall have to use <emphasis>ink</emphasis>.",
+     "A <emphasis>record</emphasis>. I'll need a fresh <emphasis>page</emphasis>."
+    ]
+   },
+   "finish": {
+    "direction": "a dry, weary old race commentator in an animated kart-racing game, calling the finish with restrained satisfaction",
+    "lines": [
+     "And across the <emphasis>line</emphasis>. That's the race.",
+     "The chequered flag, and a result I shall have to <emphasis>write down</emphasis>."
+    ]
+   }
+  }
+ },
+ "penny": {
+  "name": "Penny Speckle",
+  "animal": "Guinea Fowl",
+  "brief": "loud guinea fowl and former racer, the colour commentator: a brassy, husky middle-aged Northern English woman, big chesty laugh, warm and loud, punchy and quick, cheeky, always on the edge of cackling",
+  "audition": "Ooh, I tell you what, Barnaby, give me a kart and ten minutes and I'd still have Max for breakfast! Look at that lot. Lovely!",
+  "reference": [
+   "Hello, hello. Penny Speckle here, up in the blimp, as usual.",
+   "I raced these roads for twelve seasons, and I'll tell you now, I hardly ever touched the brakes.",
+   "My old kart was a pea sorter with a lawnmower engine. Fastest thing in the county, that was.",
+   "Barnaby likes his notes. I like a good crash. We get along fine, the two of us.",
+   "The best seat in the county is this one, right by the open window.",
+   "I water the geraniums every morning before the first race. Lovely colour, aren't they?",
+   "Max is quick, I'll give him that. But I've seen quicker. I've been quicker.",
+   "The Bakery does a cheese scone that I would honestly race for.",
+   "When the blimp turns up over a course, everybody knows there's a race on.",
+   "I keep my old racing jacket on for luck. It's more patches than jacket now.",
+   "You can hear the karts from up here, like bees in a jam jar.",
+   "Right. Headset on, flask of tea, let's have ourselves a race."
+  ],
+  "callouts": {
+   "race_start": [
+    "Go on! Go on, the lot of you!",
+    "Here we go, here we go!"
+   ],
+   "overtake": [
+    "Ooh, cheeky! I like it!",
+    "Straight past! Didn't even say ta-ra!"
+   ],
+   "item_hit": [
+    "Ooh! Right in the goggles!",
+    "That's gonna leave a mark!"
+   ],
+   "crash": [
+    "Ooh, they've gone in the duck pond! Lovely!",
+    "Kart's going one way, driver's going the other!"
+   ],
+   "drift_boost": [
+    "Look at that drift! I used to do that. Better, mind.",
+    "Sparks everywhere! Gorgeous!"
+   ],
+   "last_lap": [
+    "Last lap! Give it everything you've got!",
+    "One more lap, foot down, don't look back!"
+   ],
+   "finish": [
+    "And that's it! What a race! What a race!",
+    "Over the line! Somebody get me a sit down!"
+   ]
+  },
+  "performed": {
+   "race_start": {
+    "direction": "a loud, brassy former racer turned commentator in an animated kart-racing game, bursting with excitement at the start",
+    "lines": [
+     "Go <emphasis>on</emphasis>! Go on, the <emphasis>lot</emphasis> of you!",
+     "<emphasis>Here</emphasis> we go, here we <emphasis>go</emphasis>!"
+    ]
+   },
+   "overtake": {
+    "direction": "a loud, brassy former racer turned commentator in an animated kart-racing game, delighted by a cheeky overtake",
+    "lines": [
+     "Ooh, <emphasis>cheeky</emphasis>! [laugh] I <emphasis>like</emphasis> it!",
+     "Straight <emphasis>past</emphasis>! Didn't even say <emphasis>ta-ra</emphasis>!"
+    ]
+   },
+   "item_hit": {
+    "direction": "a loud, brassy former racer turned commentator in an animated kart-racing game, gleefully wincing at a hit",
+    "lines": [
+     "[gasp] Ooh! Right in the <emphasis>goggles</emphasis>!",
+     "That's gonna leave a <emphasis>mark</emphasis>!"
+    ]
+   },
+   "crash": {
+    "direction": "a loud, brassy former racer turned commentator in an animated kart-racing game, cackling at a crash",
+    "lines": [
+     "Ooh, they've gone in the <emphasis>duck pond</emphasis>! [laugh] <emphasis>Lovely</emphasis>!",
+     "Kart's going <emphasis>one</emphasis> way, driver's going the <emphasis>other</emphasis>!"
+    ]
+   },
+   "drift_boost": {
+    "direction": "a loud, brassy former racer turned commentator in an animated kart-racing game, admiring a drift and boasting",
+    "lines": [
+     "Look at that <emphasis>drift</emphasis>! I used to do that. <emphasis>Better</emphasis>, mind.",
+     "Sparks <emphasis>everywhere</emphasis>! <emphasis>Gorgeous</emphasis>!"
+    ]
+   },
+   "last_lap": {
+    "direction": "a loud, brassy former racer turned commentator in an animated kart-racing game, roaring them on for the last lap",
+    "lines": [
+     "<emphasis>Last</emphasis> lap! Give it <emphasis>everything</emphasis> you've got!",
+     "One more lap, foot <emphasis>down</emphasis>, don't look <emphasis>back</emphasis>!"
+    ]
+   },
+   "finish": {
+    "direction": "a loud, brassy former racer turned commentator in an animated kart-racing game, ecstatic at the finish",
+    "lines": [
+     "And that's <emphasis>it</emphasis>! What a race! What a <emphasis>race</emphasis>!",
+     "Over the <emphasis>line</emphasis>! [laugh] Somebody get me a <emphasis>sit down</emphasis>!"
+    ]
+   }
+  },
+  "pronounce": {
+   "Duvet": "Doo-vay"
+  }
+ },
+ "double_act": {
+  "_about": "Sample race calls as exchanges. Each entry is one call, played in order. The performed versions are below, one direction per speaker per call.",
+  "calls": [
+   {
+    "moment": "race_start",
+    "lines": [
+     {
+      "who": "barnaby",
+      "line": "Lights are on. And they're away."
+     },
+     {
+      "who": "penny",
+      "line": "Go on! Go on, the lot of you!"
+     }
+    ]
+   },
+   {
+    "moment": "daytime_grumble",
+    "lines": [
+     {
+      "who": "barnaby",
+      "line": "A lovely sunny afternoon for it. I do so hate them."
+     },
+     {
+      "who": "penny",
+      "line": "Cheer up, you old feather duster!"
+     }
+    ]
+   },
+   {
+    "moment": "overtake",
+    "lines": [
+     {
+      "who": "barnaby",
+      "line": "Mabel through on the inside at the mill. Unhurried, as ever."
+     },
+     {
+      "who": "penny",
+      "line": "Like a cow through a hedge, that! Lovely!"
+     }
+    ]
+   },
+   {
+    "moment": "max_leads",
+    "lines": [
+     {
+      "who": "barnaby",
+      "line": "Maximillian Gallop leads. Again."
+     },
+     {
+      "who": "penny",
+      "line": "Somebody knock him off his perch, I'm begging you."
+     }
+    ]
+   },
+   {
+    "moment": "item_hit",
+    "lines": [
+     {
+      "who": "penny",
+      "line": "Ooh! Egg, right in the goggles!"
+     },
+     {
+      "who": "barnaby",
+      "line": "That'll be Hettie's. She'll be apologising for a full lap."
+     }
+    ]
+   },
+   {
+    "moment": "crash",
+    "lines": [
+     {
+      "who": "barnaby",
+      "line": "And the Major has gone into the duck pond."
+     },
+     {
+      "who": "penny",
+      "line": "Best place for him!"
+     }
+    ]
+   },
+   {
+    "moment": "drift_boost",
+    "lines": [
+     {
+      "who": "penny",
+      "line": "Look at that drift! I used to do that. Better, mind."
+     },
+     {
+      "who": "barnaby",
+      "line": "She didn't."
+     }
+    ]
+   },
+   {
+    "moment": "close_battle",
+    "lines": [
+     {
+      "who": "barnaby",
+      "line": "Puddles and Marmalade, side by side, nothing in it."
+     },
+     {
+      "who": "penny",
+      "line": "Come on, piggy!"
+     },
+     {
+      "who": "barnaby",
+      "line": "We're meant to be impartial, Penny."
+     }
+    ]
+   },
+   {
+    "moment": "last_lap",
+    "lines": [
+     {
+      "who": "barnaby",
+      "line": "Last lap. The bell, such as it is, is a cowbell."
+     },
+     {
+      "who": "penny",
+      "line": "Ring it, Mabel!"
+     }
+    ]
+   },
+   {
+    "moment": "record",
+    "lines": [
+     {
+      "who": "barnaby",
+      "line": "That is a new lap record for the quarry run. I shall have to use ink."
+     },
+     {
+      "who": "penny",
+      "line": "Ink! He's never used ink!"
+     }
+    ]
+   },
+   {
+    "moment": "finish",
+    "lines": [
+     {
+      "who": "penny",
+      "line": "Duvet wins it! Is Duvet even awake?"
+     },
+     {
+      "who": "barnaby",
+      "line": "Asleep at the line, apparently. That takes some doing."
+     }
+    ]
+   }
+  ],
+  "performed": [
+   {
+    "moment": "race_start",
+    "lines": [
+     {
+      "who": "barnaby",
+      "direction": "a dry, weary old race commentator in an animated kart-racing game, crisp and understated, calling the start",
+      "line": "Lights are on. [pause] And they're <emphasis>away</emphasis>."
+     },
+     {
+      "who": "penny",
+      "direction": "a loud, brassy former racer turned commentator in an animated kart-racing game, bursting with excitement at the start",
+      "line": "Go <emphasis>on</emphasis>! Go on, the <emphasis>lot</emphasis> of you!"
+     }
+    ]
+   },
+   {
+    "moment": "daytime_grumble",
+    "lines": [
+     {
+      "who": "barnaby",
+      "direction": "a dry, weary old race commentator in an animated kart-racing game, grumbling deadpan about the sunshine",
+      "line": "A lovely sunny afternoon for it. [sigh] I do <emphasis>so</emphasis> hate them."
+     },
+     {
+      "who": "penny",
+      "direction": "a loud, brassy former racer turned commentator in an animated kart-racing game, teasing her grumpy co-host affectionately",
+      "line": "Cheer <emphasis>up</emphasis>, you old <emphasis>feather duster</emphasis>!"
+     }
+    ]
+   },
+   {
+    "moment": "overtake",
+    "lines": [
+     {
+      "who": "barnaby",
+      "direction": "a dry, weary old race commentator in an animated kart-racing game, crisp and understated, calling an overtake",
+      "line": "Mabel through on the <emphasis>inside</emphasis> at the mill. Unhurried, as <emphasis>ever</emphasis>."
+     },
+     {
+      "who": "penny",
+      "direction": "a loud, brassy former racer turned commentator in an animated kart-racing game, delighted, laughing",
+      "line": "Like a cow through a <emphasis>hedge</emphasis>, that! [laugh] <emphasis>Lovely</emphasis>!"
+     }
+    ]
+   },
+   {
+    "moment": "max_leads",
+    "lines": [
+     {
+      "who": "barnaby",
+      "direction": "a dry, weary old race commentator in an animated kart-racing game, utterly unsurprised",
+      "line": "Maximillian Gallop leads. [pause] <emphasis>Again</emphasis>."
+     },
+     {
+      "who": "penny",
+      "direction": "a loud, brassy former racer turned commentator in an animated kart-racing game, exasperated and pleading",
+      "line": "Somebody knock him off his <emphasis>perch</emphasis>, I'm <emphasis>begging</emphasis> you."
+     }
+    ]
+   },
+   {
+    "moment": "item_hit",
+    "lines": [
+     {
+      "who": "penny",
+      "direction": "a loud, brassy former racer turned commentator in an animated kart-racing game, gleefully wincing at a hit",
+      "line": "[gasp] Ooh! <emphasis>Egg</emphasis>, right in the <emphasis>goggles</emphasis>!"
+     },
+     {
+      "who": "barnaby",
+      "direction": "a dry, weary old race commentator in an animated kart-racing game, a single bone-dry aside, said once",
+      "line": "That'll be Hettie's. She'll be apologising for a <emphasis>full</emphasis> lap."
+     }
+    ]
+   },
+   {
+    "moment": "crash",
+    "lines": [
+     {
+      "who": "barnaby",
+      "direction": "a dry, weary old race commentator in an animated kart-racing game, deadpan about a crash",
+      "line": "And the Major has gone into the <emphasis>duck pond</emphasis>."
+     },
+     {
+      "who": "penny",
+      "direction": "a loud, brassy former racer turned commentator in an animated kart-racing game, cackling with delight",
+      "line": "<emphasis>Best</emphasis> place for him! [laugh]"
+     }
+    ]
+   },
+   {
+    "moment": "drift_boost",
+    "lines": [
+     {
+      "who": "penny",
+      "direction": "a loud, brassy former racer turned commentator in an animated kart-racing game, admiring a drift and boasting",
+      "line": "Look at that <emphasis>drift</emphasis>! I used to do that. <emphasis>Better</emphasis>, mind."
+     },
+     {
+      "who": "barnaby",
+      "direction": "a dry, weary old race commentator in an animated kart-racing game, flat, quiet correction",
+      "line": "She <emphasis>didn't</emphasis>."
+     }
+    ]
+   },
+   {
+    "moment": "close_battle",
+    "lines": [
+     {
+      "who": "barnaby",
+      "direction": "a dry old race commentator in an animated kart-racing game, quickening a little for a close battle",
+      "line": "Puddles and Marmalade, side by <emphasis>side</emphasis>, nothing in it."
+     },
+     {
+      "who": "penny",
+      "direction": "a loud, brassy former racer turned commentator in an animated kart-racing game, shamelessly cheering for a favourite",
+      "line": "Come <emphasis>on</emphasis>, piggy!"
+     },
+     {
+      "who": "barnaby",
+      "direction": "a dry, weary old race commentator in an animated kart-racing game, mild reproach",
+      "line": "We're meant to be <emphasis>impartial</emphasis>, Penny."
+     }
+    ]
+   },
+   {
+    "moment": "last_lap",
+    "lines": [
+     {
+      "who": "barnaby",
+      "direction": "a dry, weary old race commentator in an animated kart-racing game, wry about the last-lap bell",
+      "line": "Last lap. The bell, such as it <emphasis>is</emphasis>, is a <emphasis>cowbell</emphasis>."
+     },
+     {
+      "who": "penny",
+      "direction": "a loud, brassy former racer turned commentator in an animated kart-racing game, shouting encouragement",
+      "line": "<emphasis>Ring</emphasis> it, Mabel!"
+     }
+    ]
+   },
+   {
+    "moment": "record",
+    "lines": [
+     {
+      "who": "barnaby",
+      "direction": "a dry old race commentator in an animated kart-racing game, quietly impressed despite himself",
+      "line": "That is a new lap <emphasis>record</emphasis> for the quarry run. I shall have to use <emphasis>ink</emphasis>."
+     },
+     {
+      "who": "penny",
+      "direction": "a loud, brassy former racer turned commentator in an animated kart-racing game, scandalised and thrilled",
+      "line": "<emphasis>Ink</emphasis>! He's <emphasis>never</emphasis> used ink!"
+     }
+    ]
+   },
+   {
+    "moment": "finish",
+    "lines": [
+     {
+      "who": "penny",
+      "direction": "a loud, brassy former racer turned commentator in an animated kart-racing game, amazed and laughing at the winner",
+      "line": "Duvet <emphasis>wins</emphasis> it! [laugh] Is Duvet even <emphasis>awake</emphasis>?"
+     },
+     {
+      "who": "barnaby",
+      "direction": "a dry, weary old race commentator in an animated kart-racing game, deadpan wrap-up",
+      "line": "Asleep at the line, apparently. That takes some <emphasis>doing</emphasis>."
+     }
+    ]
+   }
+  ]
+ }
+}

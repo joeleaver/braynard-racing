@@ -1,0 +1,74 @@
+{
+ "_about": "Old Gus, HAY 1050 AM \"The Old Hay Ride\" (old country, crackly AM). Same shape as racers.json: reference = calm neutral lines for the voice's long reference; links = the DJ's lines between songs, by kind; performed = the same links marked up for Drama 3 with a voice-actor direction each. His anecdotes never finish: the song cuts in mid-sentence, and a later link picks the story up again (anecdote_goat_part_1 → anecdote_goat_part_2 → ...).",
+ "name": "Old Gus",
+ "animal": "Tortoise",
+ "station": "HAY 1050 AM, The Old Hay Ride",
+ "brief": "ancient tortoise who has hosted an old-time country radio show for ninety years: a very old American man, slow, creaky and quavery, a rural Appalachian drawl, warm and rambling, long pauses, easily side-tracked",
+ "audition": "Well now. This here's Hay ten-fifty, The Old Hay Ride. Reminds me of the summer of, oh, nineteen-something. Now where was I.",
+ "pronounce": {
+  "HAY": "Hay"
+ },
+ "reference": [
+  "Well now. I've been sitting in this chair since before the county had roads.",
+  "The radio shack is up on the hill behind the old hay barn. It leans a little, same as me.",
+  "We broadcast on the AM band, so you'll hear a bit of crackle. That's just the weather talking.",
+  "I play the old songs, the ones my granddaddy used to hum.",
+  "My first show was ninety years ago this spring. Or thereabouts.",
+  "I keep a banjo on the wall, though I don't rightly remember how to play it.",
+  "Folks say I talk slow. I say I talk thorough.",
+  "The best fiddle player in the county lived down by the mill. Lovely fella.",
+  "There's a calendar by the door, but it's been on the same month for a while.",
+  "Some evenings the only listener is the owl up in the blimp. That's fine by me.",
+  "A good story takes its time. Like a good song, or a good tortoise.",
+  "All right, then. Let's get the next record spinning."
+ ],
+ "links": {
+  "station_intro": [
+   "Well now. Good evening, or good morning, whichever it is out there. This is Old Gus, on Hay ten-fifty, The Old Hay Ride. And here's a brand new one. Ninety Years on the Hay Ride."
+  ],
+  "anecdote_goat_part_1": [
+   "That was Lonesome Goose. Reminds me. Back in the summer of, oh, must've been fifty-one, a fella came up to the shack with a goat, and a fiddle, and a bucket of, well, you'd never guess what was in that bucket. Now, the goat. The goat was called"
+  ],
+  "anecdote_goat_part_2": [
+   "Now, where was I. The goat. Yes. The goat was called Henrietta, and the bucket, the bucket was full of, hold on, that's Sawmill Breakdown starting"
+  ],
+  "county_news": [
+   "News from the county. There's a race on tonight, down at the sawmill. I'd go along myself, only I'd get there round about Thursday."
+  ],
+  "racing_report_intro": [
+   "And now, for the young folks, here's the Racing Report. That's the owl, and the noisy one."
+  ]
+ },
+ "performed": {
+  "station_intro": {
+   "direction": "an ancient, kindly old-time country radio host in an animated game, very slow, creaky and fond, unsure what time it is, proudly introducing an old song as new",
+   "lines": [
+    "<slow>Well now.</slow> [pause] Good evening, or good <emphasis>morning</emphasis>, whichever it is out there. This is Old Gus, on Hay ten-fifty, <emphasis>The Old Hay Ride</emphasis>. And here's a <emphasis>brand new</emphasis> one. <slow>Ninety Years on the Hay Ride.</slow>"
+   ]
+  },
+  "anecdote_goat_part_1": {
+   "direction": "an ancient, rambling old-time country radio host in an animated game, slowly warming up to a long story, getting cut off mid-sentence",
+   "lines": [
+    "That was <emphasis>Lonesome Goose</emphasis>. [pause] Reminds me. Back in the summer of, oh, must've been <emphasis>fifty-one</emphasis>, a fella came up to the shack with a <emphasis>goat</emphasis>, and a <emphasis>fiddle</emphasis>, and a bucket of, [small laugh] well, you'd <emphasis>never</emphasis> guess what was in that bucket. [pause] Now, the goat. <slow>The goat was called</slow>"
+   ]
+  },
+  "anecdote_goat_part_2": {
+   "direction": "an ancient, rambling old-time country radio host in an animated game, picking a story back up, then getting interrupted again",
+   "lines": [
+    "Now, where was I. [pause] The goat. Yes. The goat was called <emphasis>Henrietta</emphasis>, and the bucket, the bucket was full of, [pause] hold on, that's <emphasis>Sawmill Breakdown</emphasis> starting"
+   ]
+  },
+  "county_news": {
+   "direction": "an ancient, kindly old-time country radio host in an animated game, slow, dry, self-deprecating",
+   "lines": [
+    "News from the county. [pause] There's a <emphasis>race</emphasis> on tonight, down at the sawmill. I'd go along myself, only I'd get there round about <emphasis>Thursday</emphasis>. [small laugh]"
+   ]
+  },
+  "racing_report_intro": {
+   "direction": "an ancient, kindly old-time country radio host in an animated game, slow and fond, a little vague about the young folks",
+   "lines": [
+    "And now, for the <emphasis>young</emphasis> folks, here's the Racing Report. [pause] That's the <emphasis>owl</emphasis>, and the <emphasis>noisy</emphasis> one."
+   ]
+  }
+ }
+}

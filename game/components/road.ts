@@ -161,6 +161,8 @@ function section(p, bridge) {
     const outline = [[-w, under], [w, under], [w, h], [p.deck, h], [p.deck, y], [-p.deck, y], [-p.deck, h], [-w, h]];
     const faces = {};
     for (let k = 1; k <= outline.length; k++) if (k !== 5) faces["band " + k] = PARAPET;
+    // A span's end faces have their own slots; left alone they take the deck's tarmac.
+    faces["start"] = faces["end"] = PARAPET;
     return { outline, faces };
   }
   // The verge sits a step below the deck, so where another road crosses, its deck stays on top.
@@ -180,6 +182,8 @@ function section(p, bridge) {
     if (role === "grass") faces["band " + (i + 1)] = GRASS;
     else if (role === "kerb") faces["band " + (i + 1)] = KERB;
   });
+  // The end faces, where a span stops against a bridge or the ground, are grass, not the deck's tarmac.
+  faces["start"] = faces["end"] = GRASS;
   return { outline, faces };
 }
 

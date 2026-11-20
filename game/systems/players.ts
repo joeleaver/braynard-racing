@@ -11,7 +11,7 @@
 // Runs in `act`, after the seats are counted and before the grid hands out the karts.
 import { race, dev, seats, ROAM } from "./state";
 import { racer as racerOf } from "../data/racers";
-import { statsOf } from "../data/handling";
+import { statsOf, STAT_NAMES } from "../data/handling";
 
 const S = pw.component("seat");
 /** A seat's karts, in racer order: Hettie's (racer 1) first. */
@@ -90,7 +90,7 @@ pw.registerSystem("players", { includeComponents: ["seat", "controls"], events: 
 const K = pw.component("kart");
 const kRacer = K.property("racer");
 const mass = pw.field("rigid_body", "mass");
-const STATS = ["topSpeed", "engineForce", "steerFast", "steerSlow", "driftTurn", "driftCarve"].map((n) => [n, K.property(n)]);
+const STATS = STAT_NAMES.map((n) => [n, K.property(n)]);
 
 pw.registerSystem("roam handling", { includeComponents: ["kart", "rigid_body"] }, ({ objects }) => {
   if (race.phase !== ROAM) return;

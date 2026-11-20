@@ -11,16 +11,17 @@ import { race, RACING, ROAM } from "./state";
 const K = pw.component("kart");
 const R = Object.fromEntries(
   ["laps", "engineForce", "topSpeed", "reverseForce", "brakeForce", "steerSlow", "steerFast", "grassSpeed", "padBoost", "hop",
-    "driftMinSpeed", "driftSteer", "driftRange", "driftTurn", "driftTurnRange", "driftAngle", "driftHold", "driftCarve", "tierTimes", "boostForce", "boostSpeed", "boostTimes",
+    "driftMinSpeed", "driftSteer", "driftRange", "driftTurn", "driftTurnRange", "driftAngle", "driftHold", "driftCarve", "driftSwing", "driftSwingMost", "driftKeep", "driftDrive",
+    "tierBlue", "tierOrange", "tierPurple", "boostForce", "boostSpeed", "boostBlue", "boostOrange", "boostPurple",
     "stability", "wheelbase", "turnGrip", "airLevel", "airDamp", "groundLevel", "groundDamp",
-    "driftDir", "charge", "boost", "held", "airborne", "speed", "steerAsk", "gasAsk", "brakeAsk", "driftAsk", "clock", "startDelay"].map((n) => [n, K.property(n)]),
+    "driftDir", "charge", "tier", "boost", "held", "airborne", "speed", "steerAsk", "gasAsk", "brakeAsk", "driftAsk", "clock", "startDelay"].map((n) => [n, K.property(n)]),
 );
 const position = pw.vec3("transform", "position");
 const rotation = pw.quat("transform", "rotation");
 
-/** Which spark tier a drift of `charge` seconds has reached: 0 none, 1 blue, 2 orange, 3 purple. */
-export function tierOf(charge, step) {
-  return Math.min(3, Math.floor(charge / step));
+/** Which spark tier a drift of `charge` seconds has reached, given the seconds to each: 0 none, 1 blue, 2 orange, 3 purple. */
+export function tierOf(charge, blue, orange, purple) {
+  return charge >= purple ? 3 : charge >= orange ? 2 : charge >= blue ? 1 : 0;
 }
 
 const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
@@ -84,12 +85,15 @@ pw.registerSystem("kart", { includeComponents: ["kart", "vehicle", "rigid_body"]
       body.applyImpulse([up[0] * g("hop"), up[1] * g("hop"), up[2] * g("hop")]);
     }
     if (dir !== 0) {
-      const stillDrifting = holding && speed > g("driftMinSpeed") && airborne < 0.6;
+      // A drift lasts over a bump or a small jump (it only charges on the ground), and ends after a second in the air.
+      const stillDrifting = holding && speed > g("driftMinSpeed") && airborne < 1;
       if (stillDrifting) {
         const tighten = clamp(sx * dir, -1, 1);
         // How far the nose is swung across the kart's path, into the drift (radians).
         const swung = Math.atan2(-dot(v, right), Math.max(Math.abs(speed), 0.1)) * dir;
-        const target = ((g("driftAngle") * Math.PI) / 180) * (0.7 + 0.3 * tighten);
+        // Tightening turns the drift faster rather than swinging the tail further: a tail swung past its
+        // angle scrubs speed and, held back by the turn below, makes the path wider, not tighter.
+        const target = ((g("driftAngle") * Math.PI) / 180) * (0.85 + 0.15 * tighten);
         // The front wheels counter-steer for the driver: they follow the kart's path, turned into the
         // corner by the drift's steer, so the slide holds instead of spinning.
         steer = clamp(dir * swung - dir * (g("driftSteer") + g("driftRange") * tighten), -0.7, 0.7);
@@ -97,22 +101,32 @@ pw.registerSystem("kart", { includeComponents: ["kart", "vehicle", "rigid_body"]
           charge += dt * (1 + 0.5 * Math.max(0, tighten));
           // Turn at the drift's rate, and swing the tail out to the drift's angle and no further.
           const rate = -dir * (g("driftTurn") + g("driftTurnRange") * tighten);
-          const wanted = rate - dir * 6 * (target - swung);
+          // The swing out is quick but capped, so the hop in doesn't snap the kart round and scrub its speed.
+          const swing = clamp(g("driftSwing") * (target - swung), -g("driftSwingMost"), g("driftSwingMost"));
+          const wanted = rate - dir * swing;
           const yaw = g("driftHold") * (wanted - dot(body.angularVelocity, up));
           body.applyTorque([up[0] * yaw, up[1] * yaw, up[2] * yaw]);
           // And carve: a pull toward the inside of the turn, across the kart's path.
           const flat = Math.hypot(v[0], v[2]);
           if (flat > 1) {
-            const pull = g("driftCarve") * (0.6 + 0.4 * tighten) * clamp(speed / g("topSpeed"), 0, 1);
+            // The stick works mostly here: tightened, it pulls the path round harder; opened, it lets it run
+            // wide. (Measured against the ground's own top speed, so a drift on grass carves as one on the road.)
+            const pull = g("driftCarve") * (0.4 + (tighten > 0 ? 1.8 : 0.5) * tighten) * clamp(speed / (g("topSpeed") * (grass ? g("grassSpeed") : 1)), 0, 1);
             // The inside of a right drift is to the right of the path: (−vz, vx) turned the drift's way.
             const ix = (dir * -v[2]) / flat;
             const iz = (dir * v[0]) / flat;
             body.applyForce([ix * pull, 0, iz * pull]);
+            // And drive: the sliding tyres drag, and a drift that bled its speed away would never be worth
+            // holding. Below its share of top speed, a push along the path makes that drag good.
+            const keep = g("driftKeep") * g("topSpeed") * (grass ? g("grassSpeed") : 1);
+            const drive = g("driftDrive") * clamp((keep - speed) / 2, 0, 1);
+            if (drive > 0) body.applyForce([(v[0] / flat) * drive, 0, (v[2] / flat) * drive]);
           }
         }
       } else {
-        const tier = tierOf(charge, g("tierTimes"));
-        if (tier > 0 && holding === false) boost = Math.max(boost, g("boostTimes") * tier);
+        const tier = tierOf(charge, g("tierBlue"), g("tierOrange"), g("tierPurple"));
+        const lasts = [0, g("boostBlue"), g("boostOrange"), g("boostPurple")][tier];
+        if (tier > 0 && holding === false) boost = Math.max(boost, lasts);
         dir = 0;
         charge = 0;
       }
@@ -169,7 +183,9 @@ pw.registerSystem("kart", { includeComponents: ["kart", "vehicle", "rigid_body"]
     if (boost > 0 && onGround) {
       // Along the way the kart is going, not where its nose points: a drift ends with the nose turned
       // into the corner, and a push that way would fire the kart into the inside wall.
-      const f = g("boostForce");
+      // It fades out as the kart nears its boosted top speed, so a long boost carries it there and holds
+      // it, rather than pushing on past.
+      const f = g("boostForce") * clamp((top - speed) / 3, 0, 1);
       const going = Math.hypot(v[0], v[1], v[2]);
       const along = going > 2 ? [v[0] / going, v[1] / going, v[2] / going] : forward;
       body.applyForce([along[0] * f, along[1] * f, along[2] * f]);
@@ -180,6 +196,7 @@ pw.registerSystem("kart", { includeComponents: ["kart", "vehicle", "rigid_body"]
     kart.vehicle.steer = steer;
     kart.set(R.driftDir, dir);
     kart.set(R.charge, charge);
+    kart.set(R.tier, dir === 0 ? 0 : tierOf(charge, g("tierBlue"), g("tierOrange"), g("tierPurple")));
     kart.set(R.boost, boost);
     kart.set(R.held, holding ? 1 : 0);
     kart.set(R.airborne, airborne);

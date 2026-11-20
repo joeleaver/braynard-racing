@@ -8,7 +8,7 @@
 // Runs in `act`, after the race rules, before anyone drives.
 import { race, seats, players, pickOf, LOBBY, ROAM } from "./state";
 import { racer } from "../data/racers";
-import { statsOf } from "../data/handling";
+import { statsOf, STAT_NAMES } from "../data/handling";
 
 const K = pw.component("kart");
 const driver = K.text("driver");
@@ -17,7 +17,7 @@ const k = Object.fromEntries(
 );
 const player = pw.field("controls", "player");
 const mass = pw.field("rigid_body", "mass");
-const STATS = ["topSpeed", "engineForce", "steerFast", "steerSlow", "driftTurn", "driftCarve"].map((n) => [n, K.property(n)]);
+const STATS = STAT_NAMES.map((n) => [n, K.property(n)]);
 
 /** A kart takes its racer's handling: what the lobby's card shows is how it drives. */
 function tune(kart) {

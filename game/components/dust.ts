@@ -4,5 +4,5 @@
 // one that matches the ground under the kart and stops the rest.
 pw.defineComponent("dust", {
   kart: pw.object({ doc: "The kart it trails behind." }),
-  kind: pw.int(1, { doc: "What it is for: 1 dirt, 2 sand, 3 mud, 4 grass, 5 ice, 6 tyre smoke (drifting on tarmac), 7 boost sparks, 8 exhaust under throttle (dark and thick), 9 exhaust cruising (light)." }),
+  kind: pw.int(1, { doc: "What it is for: 1 dirt, 2 sand, 3 mud, 4 grass, 5 ice, 6 tyre smoke (drifting on tarmac), 7 boost sparks, 8 exhaust under throttle (dark and thick), 9 exhaust cruising (light), 10, 11 and 12 drift sparks at a rear tyre (blue, orange, purple: lit as the drift reaches that tier)." }),
 });

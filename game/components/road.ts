@@ -186,7 +186,7 @@ function section(p, bridge) {
 pw.defineComponent("road", {
   profile: pw.oneOf("two-lane", "back lane", "slip road", "freeway", { doc: "The road's cross-section and markings." }),
   span: pw.float(0, { unit: "m", range: [0, 2000], doc: "How long each span is aimed at; 0 takes the profile's. A span is always a whole number of dash periods." }),
-  blend: pw.float(0, { unit: "m", range: [0, 10], doc: "How far the road melts into the ground it joins. 0 for now: blended spans leave shards and ridges on the verges at their joints (Playweft cmwl8orev)." }),
+  blend: pw.float(1.5, { unit: "m", range: [0, 10], doc: "How far the road melts into the ground it joins. 1.5 rounds the verges into a soft bank; the joints between spans are clean since Playweft 42af726f. Where two blended roads overlap (a fork, a crossing) the blend still throws shards (Playweft cmwl8orev), so a road that forks off another keeps 0 for now." }),
   ground: pw.object({ doc: "The object whose world shapes the road is built among (the Height Map's group), so it blends into that ground." }),
   bridge_from: pw.float(0, { unit: "m", group: "Bridge", doc: "Where a bridge starts, in metres along the curve; 0 for no bridge." }),
   bridge_to: pw.float(0, { unit: "m", group: "Bridge", doc: "Where the bridge ends, in metres along the curve." }),

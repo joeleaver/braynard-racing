@@ -3,8 +3,8 @@
 //
 // Runs in `react`, after the cameras have followed their karts.
 import { race, seats, LOBBY, ROAM } from "./state";
+import { followed } from "./chase_camera";
 
-const targetOf = pw.object("chaseCamera", "target");
 const human = pw.field("kart", "human");
 const place = pw.field("kart", "place");
 
@@ -12,9 +12,8 @@ pw.registerSystem("views", { phase: "react", includeComponents: ["chaseCamera"] 
   const mine = new Map();
   let leader = null;
   for (const cam of objects) {
-    const kart = cam.get(targetOf);
-    // In the open world each player has a camera per kart; only the switched-on kart's counts.
-    if (kart === null || !kart.exists || !kart.active) continue;
+    const kart = followed(cam);
+    if (kart === null || !kart.active) continue;
     if (kart.get(human) !== 0) mine.set(kart.get(human), cam);
     if (kart.get(place) === 1) leader = cam;
   }

@@ -5,20 +5,31 @@
 const C = pw.component("chaseCamera");
 const R = Object.fromEntries(["distance", "height", "lookHeight", "lookAhead", "follow", "swing", "yaw", "placed"].map((n) => [n, C.property(n)]));
 const targetOf = pw.object("chaseCamera", "target");
+const seatOf = pw.object("chaseCamera", "seat");
+const seatKart = pw.object("seat", "kart");
 const position = pw.vec3("transform", "position");
 const rotation = pw.quat("transform", "rotation");
 
 const wrap = (a) => Math.atan2(Math.sin(a), Math.cos(a));
 const closing = (rate, dt) => 1 - Math.exp(-rate * dt);
 
+/** The kart a chase camera follows: its target in a race, its seat's spawned kart in the open world; null for none. */
+export function followed(cam) {
+  const target = cam.get(targetOf);
+  if (target !== null) return target.exists ? target : null;
+  const seat = cam.get(seatOf);
+  if (seat === null || !seat.exists) return null;
+  const kart = seat.get(seatKart);
+  return kart !== null && kart.exists ? kart : null;
+}
+
 pw.registerSystem("chase camera", { phase: "react", includeComponents: ["chaseCamera"] }, ({ objects }) => {
   const dt = objects.dt;
   for (const cam of objects) {
-    const kart = cam.get(targetOf);
-    if (kart === null || !kart.exists) continue;
-    // A switched-off kart (an open-world player's other racers, an empty seat's) needs no camera; when
-    // it comes on, its camera starts behind it rather than swinging in from where it last was.
-    if (!kart.active) {
+    const kart = followed(cam);
+    // No kart (an empty seat's, or one just spawned that hasn't landed) or a switched-off one needs no
+    // camera; when one comes, the camera starts behind it rather than swinging in from where it last was.
+    if (kart === null || !kart.active) {
       if (cam.get(R.placed) !== 0) cam.set(R.placed, 0);
       continue;
     }

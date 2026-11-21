@@ -7,11 +7,13 @@
 //   progress  { season, won: { event: 1 }, courses: { course: { medal, best } }, eggs: [ids], achievements: [ids] }
 //   unlocks   { racers: [1..8], parts: [names], attachments: [names], paint: [names] }
 //   money     a whole number
-//   loadout   { racer, karts: { racer: { parts, attachments, paint } } }
+//   loadout   { racer, karts: { racer: { parts: { wheels }, attachments: { socket: name }, paint } } } (data/parts.ts)
 //   settings  { audio: { bus: volume }, graphics: { … }, access: { … }, game: { … } } (controls: the engine's rebinding)
 //   where     { x, y, z, heading, region }: the last safe spot in the player's own county, and the region it is in
 //   stats     { played (s), driven (m), longestDrift (s), longestAir (s), drifts, turbos, respawns }
 //   journal   { tracked: quest id or "", quests: { id: { step, done } }, rumours: [ids] }
+
+import { WHEELS, ATTACHMENTS, PAINT } from "./parts";
 
 export const SAVE_VERSION = 2;
 
@@ -72,9 +74,9 @@ export function addMoney(seat, amount) {
   save.set("money", Math.max(0, Math.round(save.get("money", 0) + amount)));
 }
 
-/** Unlock every racer (the dev menu's Unlock everything). Parts and paint join as they exist. */
+/** Unlock every racer, part, attachment and paint (the dev menu's Unlock everything). */
 export function unlockAll(seat) {
   const save = pw.save(seat);
   const unlocks = save.get("unlocks", FRESH.unlocks);
-  save.set("unlocks", { ...unlocks, racers: [1, 2, 3, 4, 5, 6, 7, 8] });
+  save.set("unlocks", { ...unlocks, racers: [1, 2, 3, 4, 5, 6, 7, 8], parts: Object.keys(WHEELS), attachments: Object.keys(ATTACHMENTS), paint: Object.keys(PAINT) });
 }

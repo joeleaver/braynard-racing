@@ -1,7 +1,8 @@
 // A camera that chases a kart from behind and above, swinging round after it.
 const feel = (value, unit, doc) => pw.float(value, { ...(unit ? { unit } : {}), group: "Feel", doc });
 pw.defineComponent("chaseCamera", {
-  target: pw.object({ group: "Links", doc: "The kart it follows." }),
+  target: pw.object({ group: "Links", doc: "The kart it follows, in a race." }),
+  seat: pw.object({ group: "Links", doc: "In the open world, the seat whose kart it follows (that kart is spawned when the player picks a racer, systems/players.ts); used when `target` is empty." }),
   distance: feel(5.2, "m", "How far behind."),
   height: feel(2.0, "m", "How far above."),
   lookHeight: feel(0.8, "m", "Where it looks, above the kart."),

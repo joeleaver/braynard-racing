@@ -1,25 +1,26 @@
 // The open world's players (Design, "Game systems" → "Playing together"): up to eight in a county, each
-// with their own rig (the "Player 1" blueprint: a seat, a kart for every racer with a chase camera each,
-// and a free camera). While a player is here, the kart of the racer in their loadout is switched on and
-// the rest of their karts are off; an empty seat's karts are all off, so they aren't drawn, hit nothing
-// and aren't driven by the game. systems/save.ts puts an arriving player's kart where it belongs.
+// with their own rig (the "Player 1" blueprint: a seat, a free camera and a chase camera). While a
+// player is here, the kart of the racer in their loadout is spawned from that racer's base kart
+// (data/karts.ts) and linked from their seat; systems/kart_build.ts then fits it with the effects set
+// and the player's build. When they leave, it goes. systems/save.ts puts an arriving player's kart where
+// it belongs.
 //
 // Picking another racer (the pause menu's Racers tab says "menu" with what "racer") saves it in the
-// loadout; the new racer's kart takes the old one's place and heading, and its racer's handling
-// (data/handling.ts).
+// loadout; the old kart goes and the new racer's kart is spawned in its place, facing the same way.
 //
 // Runs in `act`, after the seats are counted and before the grid hands out the karts.
-import { race, dev, seats, ROAM } from "./state";
-import { racer as racerOf } from "../data/racers";
-import { statsOf, STAT_NAMES } from "../data/handling";
+import { race, seats, ROAM } from "./state";
+import { kartOf } from "../data/karts";
 
 const S = pw.component("seat");
-/** A seat's karts, in racer order: Hettie's (racer 1) first. */
-const KARTS = ["kart", "kart2", "kart3", "kart4", "kart5", "kart6", "kart7", "kart8"].map((n) => pw.object("seat", n));
-const f = Object.fromEntries(["kartOn", "racer", "racerShown", "swapPending", "swapHeading", "swapX", "swapY", "swapZ"].map((n) => [n, S.property(n)]));
+const kartLink = pw.object("seat", "kart");
+const f = Object.fromEntries(["kartOn", "racer", "racerShown"].map((n) => [n, S.property(n)]));
 const player = pw.field("controls", "player");
 const position = pw.vec3("transform", "position");
 const rotation = pw.quat("transform", "rotation");
+
+/** How high above the ground a kart is spawned, so its wheels settle onto it. */
+const DROP = 0.4;
 
 /** Which way a kart faces on the ground (radians, 0 is −Z), as systems/dev_seats.ts measures it. */
 function headingOf(q) {
@@ -27,10 +28,9 @@ function headingOf(q) {
   return Math.atan2(-nose[0], -nose[2]);
 }
 
-/** The kart a seat's player drives now (null outside the open world's rigs). */
+/** The kart a seat's player drives now; null outside the open world's rigs, and on the tick it is spawned. */
 export function drivenKart(seat) {
-  const r = seat.get(f.racerShown) || seat.get(f.racer) || 1;
-  const kart = seat.get(KARTS[r - 1]);
+  const kart = seat.get(kartLink);
   return kart !== null && kart.exists ? kart : null;
 }
 
@@ -53,52 +53,35 @@ pw.registerSystem("players", { includeComponents: ["seat", "controls"], events: 
   for (const seat of objects) {
     const n = seat.get(player);
     const here = seats.get(n)?.here ?? false;
-    const want = here ? loadoutRacer(n) : 0;
-    const shown = seat.get(f.racerShown);
-    seat.set(f.racer, want || 1);
-    // A swap while driving: the new kart starts where the old one is, facing the same way.
-    if (here && shown !== 0 && shown !== want) {
-      const old = seat.get(KARTS[shown - 1]);
-      if (old !== null && old.exists) {
-        const at = old.get(position);
-        seat.set(f.swapX, at[0]);
-        seat.set(f.swapY, at[1]);
-        seat.set(f.swapZ, at[2]);
-        seat.set(f.swapHeading, headingOf(old.get(rotation)));
-        seat.set(f.swapPending, 1);
-      }
+    const kart = seat.get(kartLink);
+    const landed = kart !== null && kart.exists;
+    if (!here) {
+      if (landed) kart.despawn();
+      if (kart !== null) seat.set(kartLink, null);
+      seat.set(f.racerShown, 0);
       seat.set(f.kartOn, 0);
+      continue;
     }
-    seat.set(f.racerShown, want);
-    for (let r = 1; r <= 8; r++) {
-      const kart = seat.get(KARTS[r - 1]);
-      if (kart === null || !kart.exists) continue;
-      const on = r === want;
-      if (kart.active !== on) kart.active = on;
+    const want = loadoutRacer(n);
+    seat.set(f.racer, want);
+    if (seat.get(f.racerShown) !== want) {
+      // A swap while driving: the new kart starts where the old one is, facing the same way. Arriving,
+      // it starts at the seat, and systems/save.ts puts it at the player's spot once it has landed.
+      let at = seat.get(position);
+      let heading = 0;
+      if (landed) {
+        at = kart.get(position);
+        heading = headingOf(kart.get(rotation));
+        kart.despawn();
+      }
+      const [x, y, z] = at;
+      seat.set(kartLink, pw.spawn(pw.blueprint(kartOf(want).blueprint), { position: { x, y: y + DROP, z }, rotation: pw.axisAngle([0, 1, 0], heading) }));
+      seat.set(f.racerShown, want);
+      seat.set(f.kartOn, 1);
+      continue;
     }
-    // A kart switched on joins the world's sets at the tick's end, so it can be moved from the next tick.
-    seat.set(f.kartOn, here ? Math.min(2, seat.get(f.kartOn) + 1) : 0);
-    if (seat.get(f.swapPending) === 1 && seat.get(f.kartOn) >= 2) {
-      dev.sends.set(n, { to: [seat.get(f.swapX), seat.get(f.swapY), seat.get(f.swapZ)], heading: seat.get(f.swapHeading) });
-      seat.set(f.swapPending, 0);
-    }
-    if (!here) seat.set(f.swapPending, 0);
-  }
-});
-
-// Each kart drives as its racer does: the racer's handling, as a race gives it (systems/grid.ts).
-const K = pw.component("kart");
-const kRacer = K.property("racer");
-const mass = pw.field("rigid_body", "mass");
-const STATS = STAT_NAMES.map((n) => [n, K.property(n)]);
-
-pw.registerSystem("roam handling", { includeComponents: ["kart", "rigid_body"] }, ({ objects }) => {
-  if (race.phase !== ROAM) return;
-  for (const kart of objects) {
-    const r = racerOf(kart.get(kRacer));
-    if (r === undefined) continue;
-    const stats = statsOf(r);
-    for (const [n, field] of STATS) if (kart.get(field) !== stats[n]) kart.set(field, stats[n]);
-    if (kart.get(mass) !== stats.mass) kart.set(mass, stats.mass);
+    // The tick after it is spawned the kart has landed: it is this seat's to drive from now on.
+    if (landed && kart.get(player) !== n) kart.set(player, n);
+    seat.set(f.kartOn, landed ? 2 : seat.get(f.kartOn));
   }
 });

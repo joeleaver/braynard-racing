@@ -4,7 +4,7 @@
 // - Arriving: a player's save is brought up to date (data/save.ts), and in free roam the host (the
 //   county's owner) is put back at their last safe spot, or at the start for a new player. Everyone
 //   else arrives around the host once the host is placed: either side, then a row behind, and so on.
-//   A player is placed once their kart is switched on (systems/players.ts); systems/dev_hold.ts moves
+//   A player is placed once their kart has been spawned and landed (systems/players.ts); systems/dev_hold.ts moves
 //   the karts. A guest who becomes the host (the host left) stays where they are and starts saving
 //   their own spot from there.
 // - Driving: every 10 seconds of safe driving in free roam (on the ground, upright, something solid
@@ -54,9 +54,8 @@ pw.registerSystem("arrivals", { includeComponents: ["seat", "controls"] }, ({ ob
     if (race.phase !== ROAM) continue;
     if (n !== boss) guests += 1;
     if (seat.get(f.placed) === 1) continue;
-    // A kart switched on this tick joins the world's sets at the tick's end: place it the tick after.
-    const kart = drivenKart(seat);
-    if (kart !== null && kart.exists && seat.get(f.kartOn) < 2) continue;
+    // A kart spawned this tick lands at the tick's end: place it the tick after (systems/players.ts).
+    if (drivenKart(seat) === null || seat.get(f.kartOn) < 2) continue;
     if (n === boss) {
       const spot = spotOf(n) ?? startOf();
       if (spot !== null) dev.sends.set(n, { to: [spot.x, spot.y, spot.z], heading: spot.heading });

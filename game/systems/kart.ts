@@ -11,7 +11,7 @@ import { race, RACING, ROAM } from "./state";
 const K = pw.component("kart");
 const R = Object.fromEntries(
   ["laps", "engineForce", "topSpeed", "reverseForce", "brakeForce", "steerSlow", "steerFast", "grassSpeed", "padBoost", "hop",
-    "driftMinSpeed", "driftSteer", "driftRange", "driftTurn", "driftTurnRange", "driftAngle", "driftHold", "driftCarve", "driftSwing", "driftSwingMost", "driftKeep", "driftDrive",
+    "driftMinSpeed", "driftSteer", "driftRange", "driftTurn", "driftTurnRange", "driftAngle", "driftHold", "driftCarve", "driftSwing", "driftSwingMost", "driftSwingHeld", "driftKeep", "driftDrive",
     "tierBlue", "tierOrange", "tierPurple", "boostForce", "boostSpeed", "boostBlue", "boostOrange", "boostPurple",
     "stability", "wheelbase", "turnGrip", "airLevel", "airDamp", "groundLevel", "groundDamp",
     "driftDir", "charge", "tier", "boost", "held", "airborne", "speed", "steerAsk", "gasAsk", "brakeAsk", "driftAsk", "clock", "startDelay"].map((n) => [n, K.property(n)]),
@@ -93,7 +93,8 @@ pw.registerSystem("kart", { includeComponents: ["kart", "vehicle", "rigid_body"]
         const swung = Math.atan2(-dot(v, right), Math.max(Math.abs(speed), 0.1)) * dir;
         // Tightening turns the drift faster rather than swinging the tail further: a tail swung past its
         // angle scrubs speed and, held back by the turn below, makes the path wider, not tighter.
-        const target = ((g("driftAngle") * Math.PI) / 180) * (0.85 + 0.15 * tighten);
+        // Opened, the tail comes in too, so the drift runs wide instead of swinging round.
+        const target = ((g("driftAngle") * Math.PI) / 180) * (0.85 + (tighten > 0 ? 0.15 : 0.45) * tighten);
         // The front wheels counter-steer for the driver: they follow the kart's path, turned into the
         // corner by the drift's steer, so the slide holds instead of spinning.
         steer = clamp(dir * swung - dir * (g("driftSteer") + g("driftRange") * tighten), -0.7, 0.7);
@@ -102,7 +103,12 @@ pw.registerSystem("kart", { includeComponents: ["kart", "vehicle", "rigid_body"]
           // Turn at the drift's rate, and swing the tail out to the drift's angle and no further.
           const rate = -dir * (g("driftTurn") + g("driftTurnRange") * tighten);
           // The swing out is quick but capped, so the hop in doesn't snap the kart round and scrub its speed.
-          const swing = clamp(g("driftSwing") * (target - swung), -g("driftSwingMost"), g("driftSwingMost"));
+          // Once the drift is in, most of it lets go: on tarmac the tail rarely reaches its angle, and a swing
+          // still pushing would turn the kart as hard opened as held straight, so a long bend couldn't be held.
+          // (Swung past its angle, it is still pulled back at full strength.)
+          const settle = swung > target ? 0 : clamp((charge - 0.3) / 0.3, 0, 1);
+          const gain = g("driftSwing") * (1 - settle * (1 - g("driftSwingHeld")));
+          const swing = clamp(gain * (target - swung), -g("driftSwingMost"), g("driftSwingMost"));
           const wanted = rate - dir * swing;
           const yaw = g("driftHold") * (wanted - dot(body.angularVelocity, up));
           body.applyTorque([up[0] * yaw, up[1] * yaw, up[2] * yaw]);

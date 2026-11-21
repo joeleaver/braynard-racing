@@ -12,7 +12,7 @@ pw.defineComponent("rival", {
   aim: dial(5, "m", "How far ahead it aims, at a crawl."),
   aimPerSpeed: dial(0.3, "s", "How much further ahead it aims for every metre per second."),
   steering: dial(2.2, "", "How sharply it steers toward where it aims."),
-  driftTurn: dial(0.9, "rad", "A corner turning at least this much in the next 20 m, it drifts."),
+  driftTurn: dial(0.9, "rad", "A corner turning at least this much in all, and long enough for sparks, it drifts."),
   stuckAfter: dial(2.5, "s", "Stopped or far off the road this long, it asks to be put back."),
 
   cutCorners: dial(0, "m", "How far toward a corner's inside it moves its line as the corner comes."),

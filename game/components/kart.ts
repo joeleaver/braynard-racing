@@ -32,6 +32,7 @@ pw.defineComponent("kart", {
   driftCarve: stat(450, "N", "The pull toward the inside of a drift, so it turns tighter than grip alone."),
   driftSwing: stat(6, "1/s", "How quickly the tail swings out to the drift's angle: the turn added per radian it is short of it."),
   driftSwingMost: stat(2, "rad/s", "The most that swing adds to the turn, so the hop in is quick but never a snap round."),
+  driftSwingHeld: stat(0.25, "×", "How much of that swing stays on once the drift is in (after its first 0.3–0.6 s), so the stick, not the swing, sets the turn."),
   driftKeep: stat(0.92, "", "The share of top speed a drift holds on the road: below it, the drive below pushes along the kart's path."),
   driftDrive: stat(700, "N", "The push along its path that keeps a drift at its speed, against the sliding tyres' drag."),
   tierBlue: stat(0.6, "s", "Seconds of drift (held straight; a tightened drift builds faster) to the first spark tier, blue."),

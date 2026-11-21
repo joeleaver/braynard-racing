@@ -10,6 +10,7 @@ export const DRIFT = {
   driftRange: 0.05,
   driftSwing: 6,
   driftSwingMost: 2,
+  driftSwingHeld: 0.25,
   driftKeep: 0.92,
   driftDrive: 700,
   tierBlue: 0.6,

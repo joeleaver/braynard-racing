@@ -27,6 +27,8 @@ export const race = {
 export const dev = {
   /** A Dev Tools card lets players open the dev menu. */
   enabled: false,
+  /** The rivals never drift (systems/telemetry.ts's "nodrift"), to measure what drifting is worth. Testing only. */
+  noDrift: false,
   /** This scene's name, for Reload scene; empty when the card doesn't say. */
   scene: "",
   /** The time of day and the weather, for the menu. */

@@ -12,10 +12,12 @@
 // so every machine in a shared game sees the same mistakes.
 //
 // Runs in `act`, before the kart reads its asks.
+import { dev } from "./state";
+
 const K = pw.component("kart");
 const V = pw.component("rival");
 const k = Object.fromEntries(
-  ["steerAsk", "gasAsk", "brakeAsk", "driftAsk", "respawnAsk", "laps", "human", "topSpeed", "driftMinSpeed", "driftDir", "speed", "clock", "startDelay"].map((n) => [n, K.property(n)]),
+  ["steerAsk", "gasAsk", "brakeAsk", "driftAsk", "respawnAsk", "laps", "human", "topSpeed", "driftMinSpeed", "driftDir", "speed", "clock", "startDelay", "tierBlue"].map((n) => [n, K.property(n)]),
 );
 const r = Object.fromEntries(
   ["lane", "pace", "cornerGrip", "braking", "aim", "aimPerSpeed", "steering", "driftTurn", "stuckAfter", "stuck", "wanted",
@@ -78,6 +80,48 @@ function lookAlong(line, t, metres, step, grip) {
     heading = next;
   }
   return { turned, tightest, at };
+}
+
+/**
+ * The corner from `t` on, up to `most` metres: how far along it ends and how far it turns, signed. It
+ * starts where the road first bends tighter than a 50 m circle and runs while it keeps bending that way;
+ * 8 m of straighter road, or a bend the other way, ends it.
+ */
+function cornerFrom(line, t, most) {
+  let heading = headingAt(line, t);
+  let turned = 0;
+  let ends = 0;
+  let way = 0;
+  let calm = 0;
+  for (let s = 2; s <= most; s += 2) {
+    const next = headingAt(line, t + s / line.length);
+    const bend = turnOf(heading, next);
+    heading = next;
+    if (Math.abs(bend) > 2 / 50 && (way === 0 || Math.sign(bend) === way)) {
+      way = Math.sign(bend);
+      turned += bend;
+      ends = s;
+      calm = 0;
+    } else if (way !== 0) {
+      calm += 2;
+      if (calm >= 8 || Math.sign(bend) === -way && Math.abs(bend) > 2 / 50) break;
+      turned += bend;
+    }
+  }
+  return { turned, ends };
+}
+
+/** How far the road turns against `way` over `metres` from `t`: a bend the other way coming. */
+function against(line, t, metres, way) {
+  let heading = headingAt(line, t);
+  let turned = 0;
+  for (let s = 2; s <= metres; s += 2) {
+    const next = headingAt(line, t + s / line.length);
+    const bend = turnOf(heading, next) * way;
+    if (bend < 0) turned -= bend;
+    heading = next;
+  }
+  return turned;
 }
 
 /** A random number from -1 to 1. */
@@ -161,32 +205,45 @@ pw.registerSystem("rivals", { includeComponents: ["kart", "rival", "rigid_body"]
     }
     target = Math.max(target, kart.get(k.driftMinSpeed) + 1);
 
-    // The drift: into a long corner at speed, held while the road keeps turning the same way. Only
-    // with the kart already steering into that corner and lined up with the road, so a drift never
-    // starts while it is still catching the last one; and only where the road runs on fairly straight
-    // after it, so the mini-turbo it ends with has room instead of firing the kart into the next bend.
+    // The drift: into a corner that turns far and lasts long enough for sparks, at speed, held while
+    // the road keeps turning the same way. Only with the kart already steering into that corner and lined
+    // up with the road, so a drift never starts while it is still catching the last one; and, before a bend
+    // the other way, let go early enough that the mini-turbo is spent before it.
     const drifting = kart.get(k.driftDir);
     const [nx, nz] = headingAt(line, near.t);
     const lined = Math.abs(turnOf(flat(forward), [nx, nz])) < 0.3;
-    const after = lookAlong(line, near.t + 20 / line.length, 25, 2.5, grip);
     let drift = 0;
     if (drifting !== 0) {
-      const still = lookAlong(line, near.t, 10, 2, grip).turned * drifting;
-      drift = still > 0.25 && !fluffDrift ? 1 : 0;
-      // In a drift the stick tightens or opens it: tighten when the aim point is further inside.
-      if (drift) steer = clamp(drifting * angle * kart.get(r.steering), -1, 1) * drifting;
+      const still = lookAlong(line, near.t, 16, 2, grip).turned * drifting;
+      // In a drift the stick tightens or opens it: tighten when the aim point is further inside. Let go as
+      // the road straightens, if it is opened all the way and still nearing the road's edge (it can only open
+      // so far), or in
+      // time for a bend the other way, so the mini-turbo is spent before it.
+      const tighten = clamp(drifting * angle * kart.get(r.steering), -1, 1);
+      const turnBack = against(line, near.t, 1.5 * Math.max(speed, 0) + 10, drifting) > 0.5;
+      const giveUp = tighten < -0.95 && Math.abs(near.offset) > 4;
+      drift = still > 0.3 && !giveUp && !turnBack && !fluffDrift ? 1 : 0;
+      if (drift) steer = tighten * drifting;
       // A drift carves tighter than grip alone, so it can carry a little more speed.
       if (drift) target *= 1.15;
-    } else if (
-      Math.abs(corner.turned) > kart.get(r.driftTurn) &&
-      lined &&
-      Math.abs(after.turned) < 0.6 &&
-      Math.sign(steer) === Math.sign(corner.turned) &&
-      Math.abs(steer) > 0.35 &&
-      speed > kart.get(k.driftMinSpeed) + 3
-    ) {
-      drift = 1;
-      steer = Math.sign(corner.turned);
+    } else if (lined && Math.abs(steer) > 0.35 && speed > kart.get(k.driftMinSpeed) + 3) {
+      const whole = cornerFrom(line, near.t, 150);
+      const way = Math.sign(whole.turned);
+      // Long enough to hold to the first sparks at least, from about where it would start to where it
+      // must let go: the corner's end, or well before it if a bend the other way follows straight on.
+      const next = lookAlong(line, near.t + whole.ends / line.length, 25, 2.5, grip);
+      const letGo = next.turned * way < -0.5 ? whole.ends - 1.5 * speed - 10 : whole.ends;
+      const lasts = Math.max(0, letGo - 4) / Math.max(speed, 1);
+      if (
+        Math.abs(whole.turned) > kart.get(r.driftTurn) &&
+        lasts > kart.get(k.tierBlue) + 0.2 &&
+        way === Math.sign(steer) &&
+        corner.turned * way > 0.25 &&
+        !(dev.enabled && dev.noDrift)
+      ) {
+        drift = 1;
+        steer = way;
+      }
     }
 
     // Throttle up to the speed it wants, brake down to it; never both, and off the throttle in a boost

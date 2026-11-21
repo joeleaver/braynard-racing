@@ -38,6 +38,11 @@ pw.registerSystem("telemetry wheels", { phase: "react", includeComponents: ["tel
 // slip is how far the nose is turned across the kart's path (positive into a right turn's outside);
 // heading is 0 along −Z, positive turning right. Nothing in a player's game says it.
 const probing = new Set();
+// "rivals" (n: 1 on, 0 off): every kart the game drives logs, every 3 ticks,
+//   RV <tick> <racer> <x> <z> <speed> <drift> <charge> <tier> <boost> <progress> <last lap>
+// to see where the rivals drift and which sparks they reach. "nodrift" (n: 1 on, 0 off): the rivals never
+// drift, to race them against themselves and measure what drifting is worth. Testing only.
+let rivals = false;
 // "solo" (n: 1 on, 0 off): every kart the game drives is parked high in the sky, out of the way, so a
 // measured run is the same each time. Testing only.
 let solo = false;
@@ -45,7 +50,7 @@ let solo = false;
 // there at rest, for a run on open ground. Testing only.
 const puts = new Map();
 let ptick = 0;
-const P = Object.fromEntries(["human", "speed", "driftDir", "charge", "boost", "steerAsk"].map((n) => [n, pw.field("kart", n)]));
+const P = Object.fromEntries(["human", "speed", "driftDir", "charge", "boost", "steerAsk", "racer", "tier", "progress", "lastLap"].map((n) => [n, pw.field("kart", n)]));
 
 pw.registerSystem("telemetry drift probe", { phase: "react", includeComponents: ["kart", "rigid_body"], events: ["dev"] }, ({ objects, events, physics }) => {
   // Only where the dev tools are on (a Dev Tools card), as the dev menu's own actions: in a shared game
@@ -53,6 +58,8 @@ pw.registerSystem("telemetry drift probe", { phase: "react", includeComponents: 
   for (const e of dev.enabled ? events : []) {
     if (e.what === "solo") solo = e.n !== 0;
     if (e.what === "put") puts.set(e.seat, e.place.split(",").map(Number));
+    if (e.what === "rivals") rivals = e.n !== 0;
+    if (e.what === "nodrift") dev.noDrift = e.n !== 0;
     if (e.what !== "probe") continue;
     if (e.n !== 0) probing.add(e.seat);
     else probing.delete(e.seat);
@@ -80,6 +87,17 @@ pw.registerSystem("telemetry drift probe", { phase: "react", includeComponents: 
       k.set(rotation, pw.axisAngle([0, 1, 0], (-(to[2] ?? 0) * Math.PI) / 180));
     }
     puts.clear();
+  }
+  if (!dev.enabled) rivals = dev.noDrift = false;
+  if (rivals && ptick % 3 === 0) {
+    for (const k of objects) {
+      if (k.get(P.human) !== 0) continue;
+      const at = k.get(position);
+      console.log(
+        `RV ${ptick} ${k.get(P.racer)} ${at[0].toFixed(2)} ${at[2].toFixed(2)} ${k.get(P.speed).toFixed(2)} ${k.get(P.driftDir)} ` +
+          `${k.get(P.charge).toFixed(2)} ${k.get(P.tier)} ${k.get(P.boost).toFixed(2)} ${k.get(P.progress).toFixed(4)} ${k.get(P.lastLap).toFixed(2)}`,
+      );
+    }
   }
   if (probing.size === 0) return;
   for (const k of objects) {

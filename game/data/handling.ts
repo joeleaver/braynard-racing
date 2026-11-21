@@ -11,16 +11,16 @@ export const DRIFT = {
   driftSwing: 6,
   driftSwingMost: 2,
   driftSwingHeld: 0.25,
-  driftKeep: 0.92,
+  driftKeep: 0.88,
   driftDrive: 700,
   tierBlue: 0.6,
   tierOrange: 1.3,
   tierPurple: 2.2,
   boostForce: 1500,
   boostSpeed: 4,
-  boostBlue: 0.5,
-  boostOrange: 0.9,
-  boostPurple: 1.4,
+  boostBlue: 0.6,
+  boostOrange: 1.2,
+  boostPurple: 1.8,
 };
 
 /** The kart card's stats for `r`, a racer's ratings, and the rigid body's mass. */

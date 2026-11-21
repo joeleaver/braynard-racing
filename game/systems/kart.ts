@@ -58,6 +58,9 @@ pw.registerSystem("kart", { includeComponents: ["kart", "vehicle", "rigid_body"]
     // (a face whose surface is `boost`) tops the boost up; how mud, sand and ice grip and drag is the
     // ground's own, in physics.
     let boost = Math.max(0, g("boost") - dt);
+    // Braking ends a boost: a driver who comes out of a drift too hot and brakes loses the mini-turbo,
+    // not the corner, so a clumsy drift costs little.
+    if (braking > 0.5 && !waiting) boost = 0;
     if (ground !== null && ground.surface === "boost") boost = Math.max(boost, g("padBoost"));
     const top = g("topSpeed") * (grass ? g("grassSpeed") : 1) + (boost > 0 ? g("boostSpeed") : 0);
     let engine = 0;

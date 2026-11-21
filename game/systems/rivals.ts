@@ -225,7 +225,7 @@ pw.registerSystem("rivals", { includeComponents: ["kart", "rival", "rigid_body"]
       drift = still > 0.3 && !giveUp && !turnBack && !fluffDrift ? 1 : 0;
       if (drift) steer = tighten * drifting;
       // A drift carves tighter than grip alone, so it can carry a little more speed.
-      if (drift) target *= 1.15;
+      if (drift) target *= 1.1;
     } else if (lined && Math.abs(steer) > 0.35 && speed > kart.get(k.driftMinSpeed) + 3) {
       const whole = cornerFrom(line, near.t, 150);
       const way = Math.sign(whole.turned);

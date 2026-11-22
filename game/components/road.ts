@@ -52,6 +52,8 @@ const EASE = 10;
 // How far a natural road's embankment runs on in under a bridge at each end, sinking by its depth + 2 m
 // (1 in 2), so the bank slopes away into the ground with no square end face.
 const ABUTMENT = 8;
+// How far below the deck the tail's top starts under the bridge.
+const ABUT_BELOW = 0.15;
 // Whether those easing spans carry per-point sections (lofted). Off: they keep the crowned section, and
 // the mouth meets the pad with the crown's small kink. A switch for testing the Rounded-build stall.
 const EASE_LOFT = true;
@@ -484,16 +486,21 @@ pw.defineComponent("road", {
       if (isBridge && natural) {
         // The embankment's ends at a bridge: the road's own section carried ABUTMENT metres in under the
         // bridge, sinking as it goes, so the bank slopes away forwards with no square end face.
+        // Under the bridge's own width the tail starts a little below the deck: a top level with it tied
+        // with the deck for the surface and showed through as grass; much lower, and the road's rounded end
+        // left a groove at the joint. Beyond the parapets it carries the shoulder on.
         const sec = naturalSection(p, true);
         const sink = p.natural.depth + 2;
-        const sunk = sec.outline.map(([a, b]) => [a, Math.round((b - sink) * 1000) / 1000]);
+        const w = p.deck + BRIDGE.parapet, below = DECK_Y - ABUT_BELOW;
+        const top = sec.outline.map(([a, b]) => [a, Math.abs(a) <= w ? Math.min(b, below) : b]);
+        const sunk = top.map(([a, b]) => [a, Math.round((b - sink) * 1000) / 1000]);
         for (const [end, from, to] of [["start", d0, Math.min(d1, d0 + ABUTMENT)], ["end", Math.max(d0, d1 - ABUTMENT), d1]]) {
           const pts = piece(m, from, to);
-          pts[0].section = end === "start" ? sec.outline : sunk;
-          pts[pts.length - 1].section = end === "start" ? sunk : sec.outline;
+          pts[0].section = end === "start" ? top : sunk;
+          pts[pts.length - 1].section = end === "start" ? sunk : top;
           const faces = Object.assign({}, sec.faces);
           delete faces[end === "start" ? "start" : "end"];          // the face against the road is inside it
-          const tail = { shape: "Sweep", outline: sec.outline, follow: "Upright", rings: "Square", interval: 1, faces, blend: road.blend };
+          const tail = { shape: "Sweep", outline: top, follow: "Upright", rings: "Square", interval: 1, faces, blend: road.blend };
           if (ground) tail[JOINS] = ground;
           out.push({ name: "abutment " + end, components: { world_shape: tail, curve: { closed: false, points: pts }, material: { asset: GRASS } } });
         }

@@ -63,6 +63,8 @@ const CUT_BELOW = 0.08;
 // How far a cutting's rim is rounded. Rounding a cut's rim lifts the ground a little beside it, and
 // where a pad's cut meets a road's at a sharp angle that lift stood up as a fin; sharp rims don't.
 const CUT_BLEND = 0;
+// How far a junction's cutting reaches along each arm, past the mouth.
+const CUT_REACH = 3;
 const PROFILE_NAMES = ["two-lane", "back lane", "slip road", "freeway"];
 // A bridge's deck carries the same markings between parapets this wide and high, over a slab this deep.
 const BRIDGE = { parapet: 0.5, height: 1.0, under: 1.4 };
@@ -80,8 +82,8 @@ function profileName(value) {
   return PROFILES[name] ? name : "two-lane";
 }
 const profileOf = (value) => PROFILES[profileName(value)];
-const SHOULDERS = ["stepped", "natural"];
-const isNatural = (road) => !!road && (typeof road.shoulders === "number" ? SHOULDERS[road.shoulders] : road.shoulders) === "natural";
+const SHOULDERS = ["natural", "stepped"];
+const isNatural = (road) => !!road && (typeof road.shoulders === "number" ? SHOULDERS[road.shoulders] : road.shoulders || "natural") === "natural";
 const JUNCTION_FIELDS = ["junction_1", "junction_2", "junction_3", "junction_4"];
 // How far from a junction's centre the roads stop.
 const mouthOf = (junction) => (junction && junction.mouth > 0 ? junction.mouth : 12);
@@ -359,7 +361,7 @@ pw.defineComponent("road", {
   bridge_to: pw.float(0, { unit: "m", group: "Bridge", doc: "Where the bridge ends, in metres along the curve." }),
   interval: pw.float(2, { unit: "m", range: [0, 20], doc: "How far apart the Sweeps take their curve." }),
   terrain: pw.object({ doc: "The ground's own shape (its Height Map). Where the ground stands above the road, the road clears it: a cutting with sides 1:1.5. None: no cutting." }),
-  shoulders: pw.oneOf("stepped", "natural", { doc: "stepped: a 6 cm step down to a flat verge and a 1:1 bank (the first slice). natural: a crowned deck, an edge strip, a grass shoulder that rolls over and a gentle bank with a rounded toe, as the profile says." }),
+  shoulders: pw.oneOf("natural", "stepped", { doc: "natural (Joe, 2026-11-22): a crowned deck, a tarmac edge strip, a small lip, a grass shoulder that rolls over and a gentle bank with a rounded toe, as the profile says. stepped: the first slice's 6 cm step down to a flat verge and a 1:1 bank." }),
   junction_1: pw.object({ group: "Junctions", doc: "A junction the road meets: it stops at the junction's mouth, and the junction builds the rest." }),
   junction_2: pw.object({ group: "Junctions", doc: "Another junction it meets." }),
   junction_3: pw.object({ group: "Junctions", doc: "Another junction it meets." }),
@@ -390,13 +392,16 @@ pw.defineComponent("road", {
     // A natural road eases its crossfall to level over EASE metres before each junction mouth, so its
     // deck meets the junction's flat pad with no kink: those last metres are spans of their own whose
     // far end carries the level section.
-    if (natural && gaps.length) {
+    // A bridge's deck is level too, so a natural road eases to level where it meets one.
+    const levelEnds = gaps.slice();
+    if (bridge) levelEnds.push(bridge);
+    if (natural && levelEnds.length) {
       const eased = [];
       for (const q of pieces) {
         if (q.kind !== "road") { eased.push(q); continue; }
         let { d0, d1 } = q;
-        const atStart = gaps.some((g) => Math.abs(g[1] - d0) < 0.01 && g[1] < m.total - 0.01);
-        const atEnd = gaps.some((g) => Math.abs(g[0] - d1) < 0.01 && g[0] > 0.01);
+        const atStart = levelEnds.some((g) => Math.abs(g[1] - d0) < 0.01 && g[1] < m.total - 0.01);
+        const atEnd = levelEnds.some((g) => Math.abs(g[0] - d1) < 0.01 && g[0] > 0.01);
         let first = null, lastPiece = null;
         if (atStart && d1 - d0 > EASE + 2) { first = { d0, d1: d0 + EASE, kind: "road", levelStart: true }; d0 += EASE; }
         if (atEnd && d1 - d0 > EASE + 2) { lastPiece = { d0: d1 - EASE, d1, kind: "road", levelEnd: true }; d1 -= EASE; }
@@ -414,6 +419,20 @@ pw.defineComponent("road", {
     const name = (k) => "span " + (k + 1);
     const out = [];
     let last = null, lastEnd = -1;
+    let cutRun = [], cuts = 0;
+    const flushCut = () => {
+      if (cutRun.length >= 2) {
+        cuts++;
+        out.push({
+          name: "clear " + cuts,
+          components: {
+            world_shape: { shape: "Sweep", operation: "Subtract", outline: cutSection(p, natural), follow: "Upright", rings: "Square", interval: road.interval, cuts: terrain, blend: CUT_BLEND },
+            curve: { closed: false, points: cutRun },
+          },
+        });
+      }
+      cutRun = [];
+    };
     for (let k = 0; k < count; k++) {
       const { d0, d1, kind, levelStart, levelEnd } = pieces[k];
       const isBridge = kind === "bridge";
@@ -451,15 +470,15 @@ pw.defineComponent("road", {
           },
         },
       });
-      if (terrain && !isBridge) {
-        // The cutting: clears the ground above this span.
-        out.push({
-          name: "clear " + (k + 1),
-          components: {
-            world_shape: { shape: "Sweep", operation: "Subtract", outline: cutSection(p, natural), follow: "Upright", rings: "Square", interval: road.interval, cuts: terrain, blend: CUT_BLEND },
-            curve: { closed: false, points },
-          },
-        });
+      // The cutting runs as one Sweep along each unbroken stretch of road (no joints between cuts,
+      // whose meeting end faces built badly), broken only at junction gaps and bridges.
+      if (terrain) {
+        const strip = (q) => ({ position: q.position, handle_in: q.handle_in, handle_out: q.handle_out });
+        if (!isBridge) {
+          if (!cutRun.length) cutRun.push(...points.map(strip));
+          else { cutRun[cutRun.length - 1].handle_out = points[0].handle_out; cutRun.push(...points.slice(1).map(strip)); }
+        }
+        if (isBridge || !joinsAfter) flushCut();
       }
     }
     return out;
@@ -781,9 +800,21 @@ function shoulderSweep(p, corner, heightAt) {
   }
   if (pts.length < 2) return null;
   const n = p.natural;
+  // How far out the shoulder may reach: on a corner's arc, less than the arc's radius, or it folds over
+  // the arc's centre into a fin. Shallower banks first; if even the shallowest is too wide, the part
+  // beyond the rolled shoulder is squeezed in.
   const room = isFinite(corner.radius) ? 0.8 * corner.radius : Infinity;
-  const depth = Math.max(0.3, Math.min(n.depth, (room - n.edge - n.shoulder) / n.bank + n.drop));
-  const out = shoulderOut(n, 0, 0, 0, depth);
+  let depth = n.depth, out = shoulderOut(n, 0, 0, 0, depth);
+  while (out[out.length - 1][0] > room && depth > 0.3) {
+    depth = Math.max(0.3, depth - 0.1);
+    out = shoulderOut(n, 0, 0, 0, depth);
+  }
+  const foot = out[out.length - 1][0];
+  if (foot > room) {
+    const keep = out[4][0];                                  // the end of the rolled shoulder
+    const k = Math.max(0.05, (room - keep) / Math.max(0.01, foot - keep));
+    out = out.map(([a, b, r], i) => [i > 4 ? keep + (a - keep) * k : Math.min(a, room), b, r]);
+  }
   const outline = [[-0.5, -depth], [out[out.length - 1][0], -depth]];
   const roles = ["grass"];
   for (let i = out.length - 2; i >= 0; i--) { outline.push([out[i][0], out[i][1]]); roles.push(out[i + 1][2]); }
@@ -871,7 +902,9 @@ function buildJunction(junction, object) {
       const pr = profileOf(arm.profile);
       return Math.max(v, arm.natural ? pr.natural.edge + LIP[0] + pr.natural.shoulder : pr.verge);
     }, 0);
-    const cut = onPlane(outlineOf(arms, reachOut, junction.radius, OVERLAP), y - CUT_BELOW + CUT_H, plane.b, plane.c, CUT_H);
+    // It reaches CUT_REACH along each arm, well into the arm's own cutting, so no sliver of ground is
+    // left standing between the two.
+    const cut = onPlane(outlineOf(arms, reachOut, junction.radius, CUT_REACH), y - CUT_BELOW + CUT_H, plane.b, plane.c, CUT_H);
     children.push({
       name: "clear",
       position: cut.position, rotation: cut.rotation, scale: [1, CUT_H, 1],

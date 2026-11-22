@@ -26,6 +26,10 @@ const GRASS = "01M7401DG253AMVJXK6H82N33K";
 const KERB = "01M7TXFYTVTZPQ53CG8VXAMNFN";
 const PARAPET = "01M7TXFYWMQTG4T8QK8K89JRY2";
 const PLAIN = "01M7TXHM4N940498SBC5G8HKVR";
+// Signal heads, grey-box: the poles and heads wear the parapet's grey; each lamp wears its colour's
+// "Signal lamp" material (materials/signal_lamp.material.wgsl), whose `on` game code sets per lamp.
+const SIGNAL_GREY = "01M7TXFYWMQTG4T8QK8K89JRY2";
+const SIGNAL_LAMP = { red: "01M82DQB7H9V8EKH8RG6N0S2QW", amber: "01M82DQCSRSATFASKQZGCKGGNF", green: "01M82DQE41AMV0SNFC17TY9Z82" };
 
 // Natural shoulders (Joe, 2026-11-22: "use the profile to good effect to give it natural shoulders"):
 // crossfall: the deck falls this much per metre from its crown to each edge; edge: a strip beyond the
@@ -45,6 +49,9 @@ const PROFILES = {
 // Over this many metres before a junction's mouth a natural road's crossfall eases to level, so it
 // meets the junction's pad with no kink.
 const EASE = 10;
+// How far a natural road's embankment runs on in under a bridge at each end, sinking by its depth + 2 m
+// (1 in 2), so the bank slopes away into the ground with no square end face.
+const ABUTMENT = 8;
 // Whether those easing spans carry per-point sections (lofted). Off: they keep the crowned section, and
 // the mouth meets the pad with the crown's small kink. A switch for testing the Rounded-build stall.
 const EASE_LOFT = true;
@@ -60,8 +67,9 @@ const LIP = [0.02, 0.06];
 const CUT_H = 6;
 const CUT_SLOPE = 1.5;
 const CUT_BELOW = 0.08;
-// How far a cutting's rim is rounded. Rounding a cut's rim lifts the ground a little beside it, and
-// where a pad's cut meets a road's at a sharp angle that lift stood up as a fin; sharp rims don't.
+// How far a cutting's rim is rounded. 0 for now: on Playweft 2026.11.22-f5f67017 a rounded cut (0.4) stalls
+// the build and Studio's memory climbs (seen on Home Farm and on the scratch 6-way). Try again for the
+// sawtooth at a cut's rim once Playweft's memory fix and #666 are in.
 const CUT_BLEND = 0;
 // How far a junction's cutting reaches along each arm, past the mouth.
 const CUT_REACH = 3;
@@ -473,6 +481,23 @@ pw.defineComponent("road", {
           },
         },
       });
+      if (isBridge && natural) {
+        // The embankment's ends at a bridge: the road's own section carried ABUTMENT metres in under the
+        // bridge, sinking as it goes, so the bank slopes away forwards with no square end face.
+        const sec = naturalSection(p, true);
+        const sink = p.natural.depth + 2;
+        const sunk = sec.outline.map(([a, b]) => [a, Math.round((b - sink) * 1000) / 1000]);
+        for (const [end, from, to] of [["start", d0, Math.min(d1, d0 + ABUTMENT)], ["end", Math.max(d0, d1 - ABUTMENT), d1]]) {
+          const pts = piece(m, from, to);
+          pts[0].section = end === "start" ? sec.outline : sunk;
+          pts[pts.length - 1].section = end === "start" ? sunk : sec.outline;
+          const faces = Object.assign({}, sec.faces);
+          delete faces[end === "start" ? "start" : "end"];          // the face against the road is inside it
+          const tail = { shape: "Sweep", outline: sec.outline, follow: "Upright", rings: "Square", interval: 1, faces, blend: road.blend };
+          if (ground) tail[JOINS] = ground;
+          out.push({ name: "abutment " + end, components: { world_shape: tail, curve: { closed: false, points: pts }, material: { asset: GRASS } } });
+        }
+      }
       // The cutting runs as one Sweep along each unbroken stretch of road (no joints between cuts,
       // whose meeting end faces built badly), broken only at junction gaps and bridges.
       if (terrain) {
@@ -525,6 +550,7 @@ pw.defineComponent("junction", {
   a: pw.object({ group: "Arms", doc: "An older name for an arm; works as one." }),
   b: pw.object({ group: "Arms", doc: "An older name for an arm; works as one." }),
   control: pw.oneOf("priority", "stop", "all-way stop", "lights", "roundabout", { group: "Control", doc: "Who goes. priority: the priority road's arms run through and the rest give way; stop: the same, but the rest stop; all-way stop; lights; roundabout: everyone gives way to the ring." }),
+  green: pw.float(18, { unit: "s", range: [4, 120], group: "Control", doc: "With lights: how long each phase is green." }),
   priority: pw.object({ group: "Control", doc: "The road with priority through the junction (both its arms), for priority and stop control. None: every arm gives way." }),
   priority_2: pw.object({ group: "Control", doc: "When the priority route turns here: the second road on it. Its arm and the priority road's arm are the pair that run through." }),
   approach_1: pw.object({ group: "Approaches", doc: "An approach object that sets one arm apart: its turn lanes (and later its own rule and crossing)." }),
@@ -557,6 +583,25 @@ pw.defineComponent("road_node", {
   control: pw.text("priority", { doc: "priority, stop, all-way stop, lights or roundabout." }),
   arms: pw.int(0, { doc: "How many arms." }),
   mouth: pw.float(12, { unit: "m", doc: "How far from the centre the roads stop." }),
+  // The signal plan, with lights: phases in turn, each giving green to some signal groups for a time,
+  // then amber, then all red. Game code runs it from the race clock, so every player sees the same.
+  phases: pw.int(0, { group: "Signals", doc: "How many phases; 0 without lights." }),
+  phase_1: pw.text("", { group: "Signals", doc: "The signal groups green in phase 1, as \"1,3\"." }),
+  phase_2: pw.text("", { group: "Signals" }),
+  phase_3: pw.text("", { group: "Signals" }),
+  phase_4: pw.text("", { group: "Signals" }),
+  green: pw.float(18, { unit: "s", group: "Signals", doc: "How long each phase is green." }),
+  amber: pw.float(3, { unit: "s", group: "Signals", doc: "Amber after each green." }),
+  all_red: pw.float(2, { unit: "s", group: "Signals", doc: "All red between phases." }),
+});
+
+// One lamp of a junction's signal head, as game code finds it: it sets the lamp's brightness (through
+// its material's values) from the junction's signal plan and the clock.
+pw.defineComponent("signal_lamp", {
+  junction: pw.text("", { doc: "The junction object's name." }),
+  arm: pw.int(1, { doc: "Which arm's head." }),
+  group: pw.int(1, { doc: "The signal group it shows." }),
+  colour: pw.oneOf("red", "amber", "green", { doc: "Which lamp." }),
 });
 
 // One arm of a junction, in order round its centre (index from 1), as game code and the sign plan read
@@ -988,6 +1033,16 @@ function buildJunction(junction, object) {
     components: { road_node: { junction: object.name, control: controlOf(junction), arms: arms.length, mouth: mouthOf(junction) } },
   }];
   const rules = rulesOf(junction, object, arms);
+  // With lights: one phase per signal group, in order round the junction (at most four).
+  if (controlOf(junction) === "lights") {
+    const groups = [...new Set(rules.map((r) => r.group))].sort((a, b) => a - b).slice(0, 4);
+    const node = children[0].components.road_node;
+    node.phases = groups.length;
+    groups.forEach((g, k) => { node["phase_" + (k + 1)] = String(g); });
+    node.green = junction.green > 0 ? junction.green : 18;
+    node.amber = 3;
+    node.all_red = 2;
+  }
   arms.forEach((arm, i) => {
     const left = [-arm.u[2], 0, arm.u[0]];
     const mid = add(arm.p, scaled(arm.u, STOP_OUT));
@@ -1008,6 +1063,36 @@ function buildJunction(junction, object) {
       },
     });
   });
+  if (controlOf(junction) === "lights") {
+    // A grey-box signal head at each arm's stop line, on the incoming traffic's left (Braynard drives on
+    // the left; traffic comes in against the arm's heading u, and its left is then +[-u.z, 0, u.x], the
+    // arm's front edge): a pole, a head and three lamps facing the traffic. The art comes later through
+    // hifipushie, by these names.
+    arms.forEach((arm, i) => {
+      const left = [-arm.u[2], 0, arm.u[0]];
+      const d = STOP_OUT + 0.5;
+      const base = add(add(arm.p, scaled(arm.u, d)), scaled(left, arm.half + (arm.wFront || 0) + 1.0));
+      const by = y + plane.b * base[0] + plane.c * base[2];
+      const rd = (v) => Math.round(v * 1000) / 1000;
+      const yaw = Math.round(-Math.atan2(arm.u[2], arm.u[0]) * 1800 / Math.PI) / 10;
+      const g = rules[i].group, nm = "arm " + (i + 1) + " lights";
+      children.push({
+        name: nm + " pole", position: [rd(base[0]), rd(by + 1.6), rd(base[2])], scale: [0.16, 3.2, 0.16],
+        components: { world_shape: { shape: "Cylinder" }, material: { asset: SIGNAL_GREY } },
+      });
+      children.push({
+        name: nm + " head", position: [rd(base[0]), rd(by + 3.0), rd(base[2])], rotation: [0, yaw, 0], scale: [0.3, 1.0, 0.36],
+        components: { world_shape: { shape: "Box" }, material: { asset: SIGNAL_GREY } },
+      });
+      ["red", "amber", "green"].forEach((colour, k) => {
+        const at = add(base, scaled(arm.u, 0.24));
+        children.push({
+          name: nm + " " + colour, position: [rd(at[0]), rd(by + 3.3 - k * 0.3), rd(at[2])], scale: [0.2, 0.2, 0.2],
+          components: { mesh: { shape: "Sphere", cast_shadows: false }, material: { asset: SIGNAL_LAMP[colour] }, signal_lamp: { junction: object.name, arm: i + 1, group: g, colour } },
+        });
+      });
+    });
+  }
   if (arms.length < 2) return children;
   const depth = junction.depth;
   // The pad: tarmac on top only; its walls and bottom are grass, so where a round passes over its edge

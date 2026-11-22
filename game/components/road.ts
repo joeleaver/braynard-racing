@@ -54,6 +54,13 @@ const EASE = 10;
 const ABUTMENT = 8;
 // How far below the deck the tail's top starts under the bridge.
 const ABUT_BELOW = 0.15;
+// How deep a natural road's banks run near a bridge. The profiles' own depth (2 m) left the bank's toe
+// standing in the air where a road rides up onto a bridge (the Lane's approach stands 6 m up), its square
+// ends a sawtooth every interval. Builders can't read the ground yet (asked of Playweft), so the bank
+// deepens where fills are: FILL_DEPTH at a bridge's end, easing back to the profile's depth over FILL_RUN
+// metres. Where the ground is higher the extra bank is hidden in it.
+const FILL_DEPTH = 6;
+const FILL_RUN = 80;
 // Whether those easing spans carry per-point sections (lofted). Off: they keep the crowned section, and
 // the mouth meets the pad with the crown's small kink. A switch for testing the Rounded-build stall.
 const EASE_LOFT = true;
@@ -315,8 +322,8 @@ function shoulderOut(n, x0, y0, cf, depth) {
 
 // The whole natural cross-section: a crowned deck, edge strips, rolled shoulders and banks. `level`
 // takes the crossfall away (where the road meets a junction). Same number of points either way.
-function naturalSection(p, level) {
-  const n = p.natural, cf = level ? 0 : n.crossfall, y = DECK_Y, depth = n.depth;
+function naturalSection(p, level, deep) {
+  const n = p.natural, cf = level ? 0 : n.crossfall, y = DECK_Y, depth = deep > n.depth ? deep : n.depth;
   const half = p.deck + p.kerb;
   const right = [[0, y, "deck"], [half, y - half * cf, "deck"]].concat(shoulderOut(n, half, y - half * cf, cf, depth));
   // Round the outline as a Sweep takes it: the bottom, up the right side to the crown, down the left.
@@ -428,6 +435,8 @@ pw.defineComponent("road", {
       pieces = eased;
     }
     const ground = object.refs && object.refs.ground ? object.refs.ground.id : null;
+    const bridgeEnds = [];
+    for (const pc of pieces) if (pc.kind === "bridge") bridgeEnds.push(pc.d0, pc.d1);
     const count = pieces.length;
     const name = (k) => "span " + (k + 1);
     const out = [];
@@ -456,7 +465,22 @@ pw.defineComponent("road", {
       const joinsBefore = k > 0 && Math.abs(pieces[k - 1].d1 - d0) < 0.01;
       const joinsAfter = k + 1 < count && Math.abs(pieces[k + 1].d0 - d1) < 0.01;
       const { outline, faces } = natural && !isBridge ? naturalSection(p, false) : section(p, isBridge);
-      if (EASE_LOFT && natural && !isBridge && (levelStart || levelEnd)) {
+      // How deep the bank runs at a distance along the road: deep at a bridge's ends, easing back.
+      const deepAt = (d) => {
+        let near = Infinity;
+        for (const b of bridgeEnds) near = Math.min(near, Math.abs(d - b));
+        return near >= FILL_RUN ? 0 : p.natural.depth + (FILL_DEPTH - p.natural.depth) * (1 - near / FILL_RUN);
+      };
+      const deepSpan = natural && !isBridge && bridgeEnds.some((b) => b > d0 - FILL_RUN && b < d1 + FILL_RUN);
+      if (deepSpan) {
+        // Every point carries its own section (a loft), by its distance along: the chord length from d0.
+        let along = d0;
+        points.forEach((q, i) => {
+          if (i > 0) along += Math.hypot(q.position[0] - points[i - 1].position[0], q.position[2] - points[i - 1].position[2]);
+          const lvl = EASE_LOFT && ((i === 0 && levelStart) || (i === points.length - 1 && levelEnd));
+          q.section = naturalSection(p, lvl, deepAt(Math.min(along, d1))).outline;
+        });
+      } else if (EASE_LOFT && natural && !isBridge && (levelStart || levelEnd)) {
         const flatSec = naturalSection(p, true).outline;
         points[0].section = levelStart ? flatSec : outline;
         points[points.length - 1].section = levelEnd ? flatSec : outline;
@@ -489,7 +513,7 @@ pw.defineComponent("road", {
         // Under the bridge's own width the tail starts a little below the deck: a top level with it tied
         // with the deck for the surface and showed through as grass; much lower, and the road's rounded end
         // left a groove at the joint. Beyond the parapets it carries the shoulder on.
-        const sec = naturalSection(p, true);
+        const sec = naturalSection(p, true, FILL_DEPTH);
         const sink = p.natural.depth + 2;
         const w = p.deck + BRIDGE.parapet, below = DECK_Y - ABUT_BELOW;
         const top = sec.outline.map(([a, b]) => [a, Math.abs(a) <= w ? Math.min(b, below) : b]);

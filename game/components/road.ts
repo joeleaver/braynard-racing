@@ -370,7 +370,7 @@ function buildJunction(junction, object) {
           ring.push([centre[0] + Math.cos(ang) * r, 0, centre[2] + Math.sin(ang) * r]);
         }
         ring.push(t2, t2in);
-        const at =[q[0], y - junction.depth / 2, q[2]];
+        const at = [q[0], y - junction.depth / 2, q[2]];
         let outline = ring.map((p) => [Math.round((p[0] - at[0]) * 1000) / 1000, Math.round((p[2] - at[2]) * 1000) / 1000]);
         // An Extrude's outline goes round one way; keep it counter-clockwise seen from above.
         let area = 0;

@@ -7,6 +7,11 @@ This is the stand-in until signs carry live text (a general Playweft world-text 
 stays the same either way, so these faces and live text look alike.
 
     python3 tools/sign_faces.py OUT_DIR [name ...]
+    python3 tools/sign_faces.py --keys OUT_DIR KEY ...
+
+The second form paints faces by the keys the road_sign builder names them by ("stop", "give way",
+"plate:Stop 100 m", "warn:bend left", "finger:Home Farm|¾|right" …) and prints each one's size in
+metres for the FACES table in game/components/road_sign.ts.
 
 Fonts: Lato Black for road signs, Lilita One for course, event and billboard signs (SIL OFL,
 art/fonts/).
@@ -278,6 +283,86 @@ def scenic_board(name, h=0.9):
     return img
 
 
+def octagon_pts(w):
+    """A regular octagon w across its flats, flats top and bottom, in metres from its top-left."""
+    k = w / (2 + math.sqrt(2))                # the corner cut
+    return [(k, 0), (w - k, 0), (w, k), (w, w - k), (w - k, w), (k, w), (0, w - k), (0, k)]
+
+
+def inset(pts, d):
+    """A convex outline pulled in by d metres (each corner moved toward the centre)."""
+    cx = sum(x for x, _ in pts) / len(pts)
+    cy = sum(y for _, y in pts) / len(pts)
+    out = []
+    for x, y in pts:
+        r = math.hypot(x - cx, y - cy)
+        out.append((cx + (x - cx) * (r - d) / r, cy + (y - cy) * (r - d) / r))
+    return out
+
+
+def stop_sign(w=0.75):
+    """Stop: a red octagon with a thin white edge and STOP in white capitals."""
+    img, d = canvas(w, w)
+    pts = octagon_pts(w)
+    d.polygon([(m(x), m(y)) for x, y in pts], fill=WHITE)
+    d.polygon([(m(x), m(y)) for x, y in inset(pts, w * 0.035)], fill=SIGNAL_RED)
+    f = font("lato", w * 0.24)
+    # STOP fits the octagon's middle band with a margin either side.
+    while width_m("STOP", f) > w * 0.78:
+        f = font("lato", f.size / PX * CAP["lato"] * 0.97)
+    text_at(d, (w / 2, w / 2), "STOP", f, WHITE, anchor="mm")
+    return img
+
+
+def give_way_sign(side=0.9):
+    """Give way: a white triangle pointing down, with a broad red edge. No words: the shape says it."""
+    hgt = side * math.sqrt(3) / 2
+    img, d = canvas(side, hgt)
+    tri = [(0, 0), (side, 0), (side / 2, hgt)]
+    d.polygon([(m(x), m(y)) for x, y in tri], fill=SIGNAL_RED)
+    c = (side / 2, hgt / 3)
+    k = 0.62
+    d.polygon([(m(c[0] + (x - c[0]) * k), m(c[1] + (y - c[1]) * k)) for x, y in tri], fill=WHITE)
+    return img
+
+
+# ---- faces by key: the road_sign builder names each face it wants by a key ------------------------
+# "stop", "give way", "plate:<words>", "warn:<pictogram>", "finger:<place>|<distance>|left|right",
+# "street:<name>", "course:<name>", "scenic:<name>". Its table of baked faces (road_sign.ts, FACES)
+# holds each key's material and size, which `--table` prints.
+def picto_bend_left(d, side, hgt):
+    """The right-hand bend, mirrored."""
+    layer, ld = canvas(side, hgt)
+    picto_bend_right(ld, side, hgt)
+    d._image.alpha_composite(layer.transpose(Image.FLIP_LEFT_RIGHT))
+
+
+PICTOS = {"bend right": picto_bend_right, "bend left": picto_bend_left, "ford": picto_ford, "cattle": picto_cattle}
+
+
+def face_for_key(key):
+    kind, _, rest = key.partition(":")
+    if kind == "stop":
+        return stop_sign()
+    if kind == "give way":
+        return give_way_sign()
+    if kind == "plate":
+        f = font("lato", 0.13)
+        return plate(rest, w=max(1.0, round(width_m(rest, f) + 0.3, 2)))
+    if kind == "warn":
+        return warning_triangle(PICTOS[rest])
+    if kind == "finger":
+        place, dist, side = rest.split("|")
+        return finger_arm(place, dist, left=(side == "left"))
+    if kind == "street":
+        return street_name(rest)
+    if kind == "course":
+        return course_board(rest)
+    if kind == "scenic":
+        return scenic_board(rest)
+    raise KeyError(key)
+
+
 FACES = {
     "ring-exit-7-advance": ring_exit_advance,
     "ring-exit-7-gore": ring_gore,
@@ -291,13 +376,32 @@ FACES = {
     "street-market-square": lambda: street_name("Market Square"),
     "course-barnyard-loop": lambda: course_board("Barnyard Loop"),
     "scenic-orchard-way": lambda: scenic_board("The Orchard Way"),
+    "stop": stop_sign,
+    "give-way": give_way_sign,
+    "plate-stop-100": lambda: face_for_key("plate:Stop 100 m"),
+    "plate-give-way-50": lambda: face_for_key("plate:Give way 50 m"),
 }
+
+
+def slug(key):
+    return "".join(c if c.isalnum() else "-" for c in key.lower()).strip("-")
 
 
 def main():
     if len(sys.argv) < 2:
         print(__doc__)
         sys.exit(1)
+    if sys.argv[1] == "--keys":
+        # python3 tools/sign_faces.py --keys OUT_DIR KEY ...: paint faces by road_sign key, and print
+        # each one's file and size in metres (the size goes in road_sign.ts's FACES table).
+        out = sys.argv[2]
+        os.makedirs(out, exist_ok=True)
+        for k in sys.argv[3:]:
+            img = face_for_key(k)
+            p = os.path.join(out, f"sign-{slug(k)}.png")
+            img.save(p)
+            print(f"{k}\t{p}\t{img.width / PX:.4f}\t{img.height / PX:.4f}")
+        return
     out = sys.argv[1]
     os.makedirs(out, exist_ok=True)
     names = sys.argv[2:] or list(FACES)

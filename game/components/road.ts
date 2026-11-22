@@ -380,7 +380,12 @@ function buildJunction(junction, object) {
         }
         if (area > 0) outline = outline.reverse();
         n++;
-        const corner = { shape: "Extrude", outline, blend: junction.blend };
+        // Tarmac on top only; the walls and bottom are grass. Once Playweft rounds an outside edge in
+        // the wall's face, the corner rounds into the ground as grass, a kerbed apron, instead of
+        // spreading tarmac onto the verge past its tip.
+        const faces = { bottom: GRASS };
+        for (let w = 1; w <= outline.length; w++) faces["wall " + w] = GRASS;
+        const corner = { shape: "Extrude", outline, faces, blend: junction.blend };
         if (ground) corner[JOINS] = ground;
         children.push({
           name: "corner " + n,

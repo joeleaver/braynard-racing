@@ -52,6 +52,17 @@ const EASE_LOFT = true;
 // must be steep: a gentle crease is rounded away by the blend and the tarmac-to-grass line comes out
 // ragged at the mesh's resolution; a 6 cm drop over 2 cm keeps it crisp.
 const LIP = [0.02, 0.06];
+// Cuttings: where the ground stands above a road, the road clears it. Each span carries a Subtract
+// that names the ground's shape in `cuts`, so it acts on the ground just after it is laid and before
+// the roads join; it removes everything above the road's top surface (CUT_BELOW under it, which the
+// road fills again) out to its shoulders, then rises in cutting sides CUT_SLOPE across per metre up,
+// to CUT_H above the road.
+const CUT_H = 6;
+const CUT_SLOPE = 1.5;
+const CUT_BELOW = 0.08;
+// How far a cutting's rim is rounded. Rounding a cut's rim lifts the ground a little beside it, and
+// where a pad's cut meets a road's at a sharp angle that lift stood up as a fin; sharp rims don't.
+const CUT_BLEND = 0;
 const PROFILE_NAMES = ["two-lane", "back lane", "slip road", "freeway"];
 // A bridge's deck carries the same markings between parapets this wide and high, over a slab this deep.
 const BRIDGE = { parapet: 0.5, height: 1.0, under: 1.4 };
@@ -317,6 +328,28 @@ function naturalSection(p, level) {
   return { outline, faces };
 }
 
+// The road's top surface on the right, from its middle out to the end of its shoulder or verge.
+function topChain(p, natural) {
+  if (natural) {
+    const n = p.natural, half = p.deck + p.kerb, yh = DECK_Y - half * n.crossfall;
+    return [[0, DECK_Y], [half, yh]].concat(shoulderOut(n, half, yh, n.crossfall, n.depth).slice(0, 5).map(([a, b]) => [a, b]));
+  }
+  const edge = p.deck + p.kerb, vy = DECK_Y - VERGE_STEP;
+  return [[0, DECK_Y], [edge, DECK_Y], [edge, vy], [edge + p.verge, vy]];
+}
+
+// The cutting's outline: under the road's top surface by CUT_BELOW from one shoulder to the other, then
+// up the cutting sides to CUT_H.
+function cutSection(p, natural) {
+  const right = topChain(p, natural);
+  const left = right.slice(1).map(([a, b]) => [-a, b]).reverse();
+  const chain = left.concat(right).map(([a, b]) => [a, b - CUT_BELOW]);
+  const [xe, ye] = chain[chain.length - 1];
+  const out = xe + (CUT_H - ye) * CUT_SLOPE;
+  const outline = chain.concat([[out, CUT_H], [-out, CUT_H]]);
+  return outline.map(([a, b]) => [Math.round(a * 1000) / 1000, Math.round(b * 1000) / 1000]);
+}
+
 pw.defineComponent("road", {
   profile: pw.oneOf("two-lane", "back lane", "slip road", "freeway", { doc: "The road's cross-section and markings." }),
   span: pw.float(0, { unit: "m", range: [0, 2000], doc: "How long each span is aimed at; 0 takes the profile's. A span is always a whole number of dash periods." }),
@@ -325,6 +358,7 @@ pw.defineComponent("road", {
   bridge_from: pw.float(0, { unit: "m", group: "Bridge", doc: "Where a bridge starts, in metres along the curve; 0 for no bridge." }),
   bridge_to: pw.float(0, { unit: "m", group: "Bridge", doc: "Where the bridge ends, in metres along the curve." }),
   interval: pw.float(2, { unit: "m", range: [0, 20], doc: "How far apart the Sweeps take their curve." }),
+  terrain: pw.object({ doc: "The ground's own shape (its Height Map). Where the ground stands above the road, the road clears it: a cutting with sides 1:1.5. None: no cutting." }),
   shoulders: pw.oneOf("stepped", "natural", { doc: "stepped: a 6 cm step down to a flat verge and a 1:1 bank (the first slice). natural: a crowned deck, an edge strip, a grass shoulder that rolls over and a gentle bank with a rounded toe, as the profile says." }),
   junction_1: pw.object({ group: "Junctions", doc: "A junction the road meets: it stops at the junction's mouth, and the junction builds the rest." }),
   junction_2: pw.object({ group: "Junctions", doc: "Another junction it meets." }),
@@ -350,6 +384,7 @@ pw.defineComponent("road", {
       const centre = [j.matrix[9], j.matrix[10], j.matrix[11]];
       for (const g of within(path, centre, mouthOf(j.components.junction))) gaps.push(g);
     }
+    const terrain = object.refs && object.refs.terrain ? object.refs.terrain.id : null;
     let pieces = piecesOf(m.total, road.span > 0 ? road.span : p.span, rep, bridge, gaps).filter((q) => q.kind !== "gap");
     const natural = isNatural(road);
     // A natural road eases its crossfall to level over EASE metres before each junction mouth, so its
@@ -416,6 +451,16 @@ pw.defineComponent("road", {
           },
         },
       });
+      if (terrain && !isBridge) {
+        // The cutting: clears the ground above this span.
+        out.push({
+          name: "clear " + (k + 1),
+          components: {
+            world_shape: { shape: "Sweep", operation: "Subtract", outline: cutSection(p, natural), follow: "Upright", rings: "Square", interval: road.interval, cuts: terrain, blend: CUT_BLEND },
+            curve: { closed: false, points },
+          },
+        });
+      }
     }
     return out;
   },
@@ -470,6 +515,7 @@ pw.defineComponent("junction", {
   radius: pw.float(8, { unit: "m", range: [0, 50], doc: "The corners' radius. A corner too tight for it between two arms shrinks to fit." }),
   depth: pw.float(0.6, { unit: "m", range: [0.05, 5], doc: "How deep the pad goes below the deck." }),
   blend: pw.float(0, { unit: "m", range: [0, 10], doc: "How far the pad and its verge melt into the ground they join. 0 keeps the pad's edge crisp against its verge, a 6 cm step as along the roads; 3 frays it into the grass." }),
+  terrain: pw.object({ doc: "The ground's own shape (its Height Map). The pad clears the ground above it, as the roads do." }),
   verge_blend: pw.float(1.5, { unit: "m", range: [0, 10], doc: "How far the verge ring melts into the ground below it, as the roads' banks do." }),
   ground: pw.object({ doc: "The object whose world shapes the pad is built among (the ground's group), as the roads' ground." }),
 }, {
@@ -818,6 +864,20 @@ function buildJunction(junction, object) {
   // The verge ring: the same outline widened by the verge, a step below the deck, all grass. Inside the
   // pad the pad's deck stands above it; beyond, it meets each road's verge at the same height, and it
   // melts into the ground below by `verge_blend`, as a road's banks do.
+  const terrainId = object.refs && object.refs.terrain ? object.refs.terrain.id : null;
+  if (terrainId) {
+    // The pad clears the ground above it out to the arms' shoulders, as the roads do.
+    const reachOut = arms.reduce((v, arm) => {
+      const pr = profileOf(arm.profile);
+      return Math.max(v, arm.natural ? pr.natural.edge + LIP[0] + pr.natural.shoulder : pr.verge);
+    }, 0);
+    const cut = onPlane(outlineOf(arms, reachOut, junction.radius, OVERLAP), y - CUT_BELOW + CUT_H, plane.b, plane.c, CUT_H);
+    children.push({
+      name: "clear",
+      position: cut.position, rotation: cut.rotation, scale: [1, CUT_H, 1],
+      components: { world_shape: { shape: "Extrude", operation: "Subtract", outline: cut.outline, cuts: terrainId, blend: CUT_BLEND } },
+    });
+  }
   if (arms.some((arm) => arm.natural)) {
     // Natural shoulders: along each corner, from one arm's mouth round to the next, a Sweep of the
     // same rolled shoulder the arms have, starting at the pad's edge, so pad and road edges are one.

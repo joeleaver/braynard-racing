@@ -190,7 +190,7 @@ function section(p, bridge) {
 pw.defineComponent("road", {
   profile: pw.oneOf("two-lane", "back lane", "slip road", "freeway", { doc: "The road's cross-section and markings." }),
   span: pw.float(0, { unit: "m", range: [0, 2000], doc: "How long each span is aimed at; 0 takes the profile's. A span is always a whole number of dash periods." }),
-  blend: pw.float(1.5, { unit: "m", range: [0, 10], doc: "How far the road melts into the ground it joins. 1.5 rounds the verges into a soft bank; the joints between spans are clean since Playweft 42af726f. A road forking off another blends cleanly since Playweft 37df8065; where two roads cross, the junction's corners still tear (see the junction's blend)." }),
+  blend: pw.float(1.5, { unit: "m", range: [0, 10], doc: "How far the road melts into the ground it joins. 1.5 rounds the verges into a soft bank; the joints between spans are clean since Playweft 42af726f. A road forking off another blends cleanly since Playweft 37df8065, and crossings blend cleanly with Rounded blends (Playweft d766ef66)." }),
   ground: pw.object({ doc: "The object whose world shapes the road is built among (the Height Map's group), so it blends into that ground." }),
   bridge_from: pw.float(0, { unit: "m", group: "Bridge", doc: "Where a bridge starts, in metres along the curve; 0 for no bridge." }),
   bridge_to: pw.float(0, { unit: "m", group: "Bridge", doc: "Where the bridge ends, in metres along the curve." }),
@@ -295,7 +295,7 @@ pw.defineComponent("junction", {
   b: pw.object({ doc: "The other road it joins." }),
   radius: pw.float(8, { unit: "m", range: [0, 50], doc: "The corners' radius." }),
   depth: pw.float(0.6, { unit: "m", range: [0.05, 5], doc: "How deep the corner fillets go below the deck." }),
-  blend: pw.float(0, { unit: "m", range: [0, 10], doc: "How far the corners melt into the ground they join. Keep it 0 for now: on Playweft 37df8065 a blended corner still spikes and tears where it overlaps the decks, and even at 0 its fillet leaves a dark lip (Playweft cmwl8orev)." }),
+  blend: pw.float(0, { unit: "m", range: [0, 10], doc: "How far the corners melt into the ground they join. With Rounded blends (Playweft d766ef66) 3 rounds the corners cleanly into the grass; 0 leaves the fillet's edge as a dark 26 cm wall, and 0.75–1.5 a dark fuzzy rim." }),
   ground: pw.object({ doc: "The object whose world shapes the corners are built among (the Height Map's group), as the roads' ground." }),
 }, {
   build(junction, object) {

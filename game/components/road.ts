@@ -37,6 +37,8 @@ const BRIDGE = { parapet: 0.5, height: 1.0, under: 1.4 };
 const DECK_Y = 0.06;
 // And the verges this far below the deck.
 const VERGE_STEP = 0.06;
+// How far a junction's corner fillets reach into the decks they sit between.
+const OVERLAP = 0.5;
 // The engine's world shape field that puts a shape among another object's shapes (Playweft PR).
 const JOINS = "joins";
 
@@ -357,16 +359,18 @@ function buildJunction(junction, object) {
         while (sweep > Math.PI) sweep -= 2 * Math.PI;
         while (sweep < -Math.PI) sweep += 2 * Math.PI;
         // The fillet: from just inside the corner, out along one edge, round the arc, back along the
-        // other edge. It reaches half a metre into both decks so nothing shows between.
+        // other edge. It reaches half a metre into both decks, along the whole of both edges, so
+        // the roads' own verges (a step below their decks) are covered and nothing shows between.
         const inner = sub(q, scaled(bis, 0.5));
-        const ring = [inner, t1];
+        const t1in = add(t1, scaled(na, -sa * OVERLAP)), t2in = add(t2, scaled(nb, -sb * OVERLAP));
+        const ring = [inner, t1in, t1];
         const steps = Math.max(4, Math.ceil(Math.abs(sweep) * r / 1.0));
         for (let i = 1; i < steps; i++) {
           const ang = a1 + sweep * (i / steps);
           ring.push([centre[0] + Math.cos(ang) * r, 0, centre[2] + Math.sin(ang) * r]);
         }
-        ring.push(t2);
-        const at = [q[0], y - junction.depth / 2, q[2]];
+        ring.push(t2, t2in);
+        const at =[q[0], y - junction.depth / 2, q[2]];
         let outline = ring.map((p) => [Math.round((p[0] - at[0]) * 1000) / 1000, Math.round((p[2] - at[2]) * 1000) / 1000]);
         // An Extrude's outline goes round one way; keep it counter-clockwise seen from above.
         let area = 0;

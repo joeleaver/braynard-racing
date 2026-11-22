@@ -27,12 +27,31 @@ const KERB = "01M7TXFYTVTZPQ53CG8VXAMNFN";
 const PARAPET = "01M7TXFYWMQTG4T8QK8K89JRY2";
 const PLAIN = "01M7TXHM4N940498SBC5G8HKVR";
 
+// Natural shoulders (Joe, 2026-11-22: "use the profile to good effect to give it natural shoulders"):
+// crossfall: the deck falls this much per metre from its crown to each edge; edge: a strip beyond the
+// deck in the kerb material (gravel, or the freeway's hard strip); shoulder: grass that rolls over
+// from the edge, dropping `drop` metres across its width; bank: metres across per metre down, then a
+// rounded toe; depth: how far the bank goes into the ground.
 const PROFILES = {
-  "two-lane": { deck: 4.0, kerb: 0, verge: 1.0, depth: 3, slope: 1.0, repeat: 12, span: 240, material: "01M7TXFYJPTJAS48M04QG70FKG" },
-  "back lane": { deck: 3.5, kerb: 0, verge: 1.0, depth: 3, slope: 1.0, repeat: 12, span: 240, material: "01M7TXFYMXDGKDQYM3SWJXG6WZ" },
-  "slip road": { deck: 3.0, kerb: 0, verge: 1.0, depth: 3, slope: 1.0, repeat: 12, span: 240, material: "01M7TXFYQ0S2THNY9H6XM2ECWK" },
-  "freeway": { deck: 15.0, kerb: 0.5, verge: 1.5, depth: 3, slope: 1.0, repeat: 9, span: 252, material: "01M7TXFYRYTSYEGTM31KAXFADF" },
+  "two-lane": { deck: 4.0, kerb: 0, verge: 1.0, depth: 3, slope: 1.0, repeat: 12, span: 240, material: "01M7TXFYJPTJAS48M04QG70FKG",
+    natural: { crossfall: 0.015, edge: 0.3, shoulder: 1.5, drop: 0.15, bank: 3, depth: 2 } },
+  "back lane": { deck: 3.5, kerb: 0, verge: 1.0, depth: 3, slope: 1.0, repeat: 12, span: 240, material: "01M7TXFYMXDGKDQYM3SWJXG6WZ",
+    natural: { crossfall: 0.015, edge: 0.2, shoulder: 1.2, drop: 0.12, bank: 3, depth: 1.5 } },
+  "slip road": { deck: 3.0, kerb: 0, verge: 1.0, depth: 3, slope: 1.0, repeat: 12, span: 240, material: "01M7TXFYQ0S2THNY9H6XM2ECWK",
+    natural: { crossfall: 0.02, edge: 0.3, shoulder: 1.2, drop: 0.12, bank: 2.5, depth: 2 } },
+  "freeway": { deck: 15.0, kerb: 0.5, verge: 1.5, depth: 3, slope: 1.0, repeat: 9, span: 252, material: "01M7TXFYRYTSYEGTM31KAXFADF",
+    natural: { crossfall: 0.02, edge: 1.0, shoulder: 2.0, drop: 0.2, bank: 2, depth: 3 } },
 };
+// Over this many metres before a junction's mouth a natural road's crossfall eases to level, so it
+// meets the junction's pad with no kink.
+const EASE = 10;
+// Whether those easing spans carry per-point sections (lofted). Off: they keep the crowned section, and
+// the mouth meets the pad with the crown's small kink. A switch for testing the Rounded-build stall.
+const EASE_LOFT = true;
+// The lip from a natural road's tarmac edge down onto its grass shoulder: across, down (metres). It
+// must be steep: a gentle crease is rounded away by the blend and the tarmac-to-grass line comes out
+// ragged at the mesh's resolution; a 6 cm drop over 2 cm keeps it crisp.
+const LIP = [0.02, 0.06];
 const PROFILE_NAMES = ["two-lane", "back lane", "slip road", "freeway"];
 // A bridge's deck carries the same markings between parapets this wide and high, over a slab this deep.
 const BRIDGE = { parapet: 0.5, height: 1.0, under: 1.4 };
@@ -50,6 +69,8 @@ function profileName(value) {
   return PROFILES[name] ? name : "two-lane";
 }
 const profileOf = (value) => PROFILES[profileName(value)];
+const SHOULDERS = ["stepped", "natural"];
+const isNatural = (road) => !!road && (typeof road.shoulders === "number" ? SHOULDERS[road.shoulders] : road.shoulders) === "natural";
 const JUNCTION_FIELDS = ["junction_1", "junction_2", "junction_3", "junction_4"];
 // How far from a junction's centre the roads stop.
 const mouthOf = (junction) => (junction && junction.mouth > 0 ? junction.mouth : 12);
@@ -184,19 +205,24 @@ function within(path, centre, mouth) {
   const off = (d) => { const q = path.at(d).position; return Math.hypot(q[0] - centre[0], q[2] - centre[2]) - mouth; };
   const edge = (a, b) => {                       // off(a) and off(b) differ in sign
     let fa = off(a);
-    for (let i = 0; i < 40; i++) {
+    for (let i = 0; i < 24; i++) {
       const m = (a + b) / 2, fm = off(m);
       if ((fm < 0) === (fa < 0)) { a = m; fa = fm; } else b = m;
     }
     return (a + b) / 2;
   };
-  const step = 1;
+  // Walk the curve; far from the circle, jump ahead by most of the distance still to go (the curve can't
+  // come closer faster than it runs), so a long road costs a few dozen samples, not one a metre. A
+  // builder has a fixed budget of work, and a metre at a time along a 2 km road with two junctions
+  // ran it out.
   const out = [];
-  let start = off(0) < 0 ? 0 : null;
-  let prevD = 0, prevIn = off(0) < 0;
-  for (let d = step; ; d += step) {
-    const dd = Math.min(d, path.length);
-    const isIn = off(dd) < 0;
+  let o = off(0);
+  let start = o < 0 ? 0 : null;
+  let prevD = 0, prevIn = o < 0;
+  for (;;) {
+    const dd = Math.min(prevD + Math.max(1, Math.abs(o) * 0.8), path.length);
+    o = off(dd);
+    const isIn = o < 0;
     if (isIn !== prevIn) {
       const e = edge(prevD, dd);
       if (isIn) start = e; else { out.push([start, e]); start = null; }
@@ -242,6 +268,55 @@ function section(p, bridge) {
   return { outline, faces };
 }
 
+// A natural shoulder on the right, outward from (x0, y0): the edge strip, the rolled grass, the bank
+// and its rounded toe. Answers points with the role of the segment leading to each.
+function shoulderOut(n, x0, y0, cf, depth) {
+  const pts = [];
+  let x = x0 + n.edge, y = y0 - n.edge * cf;
+  pts.push([x, y, "edge"]);
+  // A small lip where the tarmac meets the grass: the verge sits just below the edge, and the crease
+  // keeps the line between them crisp (a near-flat join is cut at the mesh's resolution, raggedly).
+  x += LIP[0]; y -= LIP[1];
+  pts.push([x, y, "grass"]);
+  for (const t of [1 / 3, 2 / 3, 1]) pts.push([x + n.shoulder * t, y - n.drop * t * t, "grass"]);
+  x += n.shoulder; y -= n.drop;
+  const toe = Math.min(0.3, Math.max(0, (y + depth) / 2));
+  const xb = x + (y - (-depth + toe)) * n.bank;
+  pts.push([xb, -depth + toe, "grass"]);
+  pts.push([xb + toe * n.bank * 2, -depth, "grass"]);
+  return pts;
+}
+
+// The whole natural cross-section: a crowned deck, edge strips, rolled shoulders and banks. `level`
+// takes the crossfall away (where the road meets a junction). Same number of points either way.
+function naturalSection(p, level) {
+  const n = p.natural, cf = level ? 0 : n.crossfall, y = DECK_Y, depth = n.depth;
+  const half = p.deck + p.kerb;
+  const right = [[0, y, "deck"], [half, y - half * cf, "deck"]].concat(shoulderOut(n, half, y - half * cf, cf, depth));
+  // Round the outline as a Sweep takes it: the bottom, up the right side to the crown, down the left.
+  const pts = [[-right[right.length - 1][0], -depth, "grass"]];      // bottom-left; its segment is the bottom
+  for (let i = right.length - 1; i >= 0; i--) {
+    const [a, b] = right[i];
+    // The segment from this point onward (towards the crown) has the role of the segment leading to it.
+    pts.push([a, b, i > 0 ? right[i][2] : "deck"]);
+  }
+  for (let i = 1; i < right.length; i++) pts.push([-right[i][0], right[i][1], i + 1 < right.length ? right[i + 1][2] : "grass"]);
+  pts.pop();                                                          // the last is the bottom-left again
+  // Each point's role names the segment from it to the next.
+  const roles = pts.map((q, i) => {
+    if (i === 0) return "grass";                                      // the bottom
+    return q[2];
+  });
+  const outline = pts.map(([a, b]) => [Math.round(a * 1000) / 1000, Math.round(b * 1000) / 1000]);
+  const faces = {};
+  // The edge strip is plain tarmac: the deck's material, beyond where its markings stop.
+  roles.forEach((role, i) => {
+    if (role === "grass") faces["band " + (i + 1)] = GRASS;
+  });
+  faces["start"] = faces["end"] = GRASS;
+  return { outline, faces };
+}
+
 pw.defineComponent("road", {
   profile: pw.oneOf("two-lane", "back lane", "slip road", "freeway", { doc: "The road's cross-section and markings." }),
   span: pw.float(0, { unit: "m", range: [0, 2000], doc: "How long each span is aimed at; 0 takes the profile's. A span is always a whole number of dash periods." }),
@@ -250,6 +325,7 @@ pw.defineComponent("road", {
   bridge_from: pw.float(0, { unit: "m", group: "Bridge", doc: "Where a bridge starts, in metres along the curve; 0 for no bridge." }),
   bridge_to: pw.float(0, { unit: "m", group: "Bridge", doc: "Where the bridge ends, in metres along the curve." }),
   interval: pw.float(2, { unit: "m", range: [0, 20], doc: "How far apart the Sweeps take their curve." }),
+  shoulders: pw.oneOf("stepped", "natural", { doc: "stepped: a 6 cm step down to a flat verge and a 1:1 bank (the first slice). natural: a crowned deck, an edge strip, a grass shoulder that rolls over and a gentle bank with a rounded toe, as the profile says." }),
   junction_1: pw.object({ group: "Junctions", doc: "A junction the road meets: it stops at the junction's mouth, and the junction builds the rest." }),
   junction_2: pw.object({ group: "Junctions", doc: "Another junction it meets." }),
   junction_3: pw.object({ group: "Junctions", doc: "Another junction it meets." }),
@@ -274,14 +350,37 @@ pw.defineComponent("road", {
       const centre = [j.matrix[9], j.matrix[10], j.matrix[11]];
       for (const g of within(path, centre, mouthOf(j.components.junction))) gaps.push(g);
     }
-    const pieces = piecesOf(m.total, road.span > 0 ? road.span : p.span, rep, bridge, gaps).filter((q) => q.kind !== "gap");
+    let pieces = piecesOf(m.total, road.span > 0 ? road.span : p.span, rep, bridge, gaps).filter((q) => q.kind !== "gap");
+    const natural = isNatural(road);
+    // A natural road eases its crossfall to level over EASE metres before each junction mouth, so its
+    // deck meets the junction's flat pad with no kink: those last metres are spans of their own whose
+    // far end carries the level section.
+    if (natural && gaps.length) {
+      const eased = [];
+      for (const q of pieces) {
+        if (q.kind !== "road") { eased.push(q); continue; }
+        let { d0, d1 } = q;
+        const atStart = gaps.some((g) => Math.abs(g[1] - d0) < 0.01 && g[1] < m.total - 0.01);
+        const atEnd = gaps.some((g) => Math.abs(g[0] - d1) < 0.01 && g[0] > 0.01);
+        let first = null, lastPiece = null;
+        if (atStart && d1 - d0 > EASE + 2) { first = { d0, d1: d0 + EASE, kind: "road", levelStart: true }; d0 += EASE; }
+        if (atEnd && d1 - d0 > EASE + 2) { lastPiece = { d0: d1 - EASE, d1, kind: "road", levelEnd: true }; d1 -= EASE; }
+        const mid = { d0, d1, kind: "road" };
+        if (atStart && !first) mid.levelStart = true;
+        if (atEnd && !lastPiece) mid.levelEnd = true;
+        if (first) eased.push(first);
+        eased.push(mid);
+        if (lastPiece) eased.push(lastPiece);
+      }
+      pieces = eased;
+    }
     const ground = object.refs && object.refs.ground ? object.refs.ground.id : null;
     const count = pieces.length;
     const name = (k) => "span " + (k + 1);
     const out = [];
     let last = null, lastEnd = -1;
     for (let k = 0; k < count; k++) {
-      const { d0, d1, kind } = pieces[k];
+      const { d0, d1, kind, levelStart, levelEnd } = pieces[k];
       const isBridge = kind === "bridge";
       const points = piece(m, d0, d1);
       if (last && Math.abs(d0 - lastEnd) < 0.01) points[0].position = last;   // the joint is one point, exactly
@@ -289,7 +388,12 @@ pw.defineComponent("road", {
       lastEnd = d1;
       const joinsBefore = k > 0 && Math.abs(pieces[k - 1].d1 - d0) < 0.01;
       const joinsAfter = k + 1 < count && Math.abs(pieces[k + 1].d0 - d1) < 0.01;
-      const { outline, faces } = section(p, isBridge);
+      const { outline, faces } = natural && !isBridge ? naturalSection(p, false) : section(p, isBridge);
+      if (EASE_LOFT && natural && !isBridge && (levelStart || levelEnd)) {
+        const flatSec = naturalSection(p, true).outline;
+        points[0].section = levelStart ? flatSec : outline;
+        points[points.length - 1].section = levelEnd ? flatSec : outline;
+      }
       // Where the span stops at a junction's mouth its end is inside the pad: tarmac, so where the
       // blend rounds the deck into the pad no grass shows across the road.
       const atMouth = (d) => gaps.some((g) => Math.abs(g[0] - d) < 0.01 || Math.abs(g[1] - d) < 0.01);
@@ -356,6 +460,12 @@ pw.defineComponent("junction", {
   control: pw.oneOf("priority", "stop", "all-way stop", "lights", "roundabout", { group: "Control", doc: "Who goes. priority: the priority road's arms run through and the rest give way; stop: the same, but the rest stop; all-way stop; lights; roundabout: everyone gives way to the ring." }),
   priority: pw.object({ group: "Control", doc: "The road with priority through the junction (both its arms), for priority and stop control. None: every arm gives way." }),
   priority_2: pw.object({ group: "Control", doc: "When the priority route turns here: the second road on it. Its arm and the priority road's arm are the pair that run through." }),
+  approach_1: pw.object({ group: "Approaches", doc: "An approach object that sets one arm apart: its turn lanes (and later its own rule and crossing)." }),
+  approach_2: pw.object({ group: "Approaches", doc: "Another approach." }),
+  approach_3: pw.object({ group: "Approaches", doc: "Another approach." }),
+  approach_4: pw.object({ group: "Approaches", doc: "Another approach." }),
+  approach_5: pw.object({ group: "Approaches", doc: "Another approach." }),
+  approach_6: pw.object({ group: "Approaches", doc: "Another approach." }),
   mouth: pw.float(12, { unit: "m", range: [3, 60], doc: "How far from the junction's centre its roads stop. A road reads this too, so name the junction on the road (junction_1…) as well as here." }),
   radius: pw.float(8, { unit: "m", range: [0, 50], doc: "The corners' radius. A corner too tight for it between two arms shrinks to fit." }),
   depth: pw.float(0.6, { unit: "m", range: [0.05, 5], doc: "How deep the pad goes below the deck." }),
@@ -399,6 +509,10 @@ pw.defineComponent("road_arm", {
 // The stop line stands this far out along each arm from its mouth, on the road's own deck.
 const STOP_OUT = 1.0;
 
+// A oneOf field's value, whether it comes as its name or its index.
+function pick(v, list) { return (typeof v === "number" ? list[v] : v) || list[0]; }
+const APPROACH_FIELDS = ["approach_1", "approach_2", "approach_3", "approach_4", "approach_5", "approach_6"];
+const TURNS = ["none", "left", "right", "both"];
 const ARM_FIELDS = ["arm_1", "arm_2", "arm_3", "arm_4", "arm_5", "arm_6", "a", "b"];
 const r2 = (p) => [Math.round(p[0] * 1000) / 1000, Math.round(p[1] * 1000) / 1000];
 
@@ -429,6 +543,7 @@ function armsOf(junction, object) {
         const f = path.at(d);
         const u = flat(out ? f.along : scaled(f.along, -1));
         arms.push({
+          natural: isNatural(ref.components.road),
           road: ref.name, id: ref.id, profile: profileName(ref.components.road ? ref.components.road.profile : "two-lane"), at: d, dir: out ? "out" : "in", u,
           p: f.position, half: prof.deck + prof.kerb, verge: prof.verge,
           angle: Math.atan2(f.position[2], f.position[0]),
@@ -437,6 +552,19 @@ function armsOf(junction, object) {
     }
   }
   arms.sort((x, y) => x.angle - y.angle);
+  // Approaches with turn lanes widen their arm's mouth on the turning side. Traffic coming in drives
+  // against the arm's heading, so its left is the arm's back edge and its right the front edge.
+  for (const field of APPROACH_FIELDS) {
+    const ref = object.refs && object.refs[field];
+    const a = ref && ref.components.approach;
+    if (!a) continue;
+    const arm = arms.find((x) => x.id === a.road && x.dir === pick(a.dir, ["in", "out"]));
+    if (!arm) continue;
+    const turn = pick(a.turn, TURNS);
+    const w = profileOf(arm.profile).deck;     // one lane, as wide as the profile's half-deck
+    if (turn === "left" || turn === "both") arm.wBack = (arm.wBack || 0) + w;
+    if (turn === "right" || turn === "both") arm.wFront = (arm.wFront || 0) + w;
+  }
   return arms;
 }
 
@@ -450,8 +578,8 @@ function outlineOf(arms, widen, radius, reach) {
   // edge (towards the arm after), the front being to the left of its heading.
   const edges = arms.map((arm) => {
     const left = [-arm.u[2], 0, arm.u[0]];
-    const h = arm.half + widen;
-    return { back: add(arm.p, scaled(left, -h)), front: add(arm.p, scaled(left, h)) };
+    const hb = arm.half + widen + (arm.wBack || 0), hf = arm.half + widen + (arm.wFront || 0);
+    return { back: add(arm.p, scaled(left, -hb)), front: add(arm.p, scaled(left, hf)) };
   });
   // Two arms so close that their decks overlap at the mouths: their edges cross outside the circle,
   // and the pad runs out to where they cross, so the outline never crosses itself. (A larger `mouth`
@@ -468,9 +596,13 @@ function outlineOf(arms, widen, radius, reach) {
     }
     return add(side === "front" ? e.front : e.back, scaled(arm.u, reach));
   };
+  // Each corner's run, from one arm's front mouth end to the next arm's back mouth end, and its radius.
+  ring.corners = [];
   for (let i = 0; i < n; i++) {
     const arm = arms[i];
     ring.push(mouthEnd(i, "back"), mouthEnd(i, "front"));
+    const corner = { from: i, points: [ring[ring.length - 1]], radius: Infinity };
+    ring.corners.push(corner);
     if (n < 2) break;
     const next = arms[(i + 1) % n], e = edges[i];
     // The corner between this arm's front edge and the next arm's back edge.
@@ -493,16 +625,22 @@ function outlineOf(arms, widen, radius, reach) {
       while (sweep > Math.PI) sweep -= 2 * Math.PI;
       while (sweep < -Math.PI) sweep += 2 * Math.PI;
       ring.push(t1);
+      corner.points.push(t1);
+      corner.radius = rr;
       const steps = Math.max(4, Math.ceil(Math.abs(sweep) * rr / 0.75));
       for (let k = 1; k < steps; k++) {
         const ang = a1 + sweep * (k / steps);
-        ring.push([centre[0] + Math.cos(ang) * rr, 0, centre[2] + Math.sin(ang) * rr]);
+        const q2 = [centre[0] + Math.cos(ang) * rr, 0, centre[2] + Math.sin(ang) * rr];
+        ring.push(q2);
+        corner.points.push(q2);
       }
       ring.push(t2);
+      corner.points.push(t2);
     }
     // Otherwise the edges part (the straight side of a T, a wide bend): the outline runs straight on
     // from this mouth to the next.
   }
+  if (n >= 2) ring.corners.forEach((c, i) => c.points.push(mouthEnd((i + 1) % n, "back")));
   return ring;
 }
 
@@ -586,6 +724,50 @@ function rulesOf(junction, object, arms) {
   });
 }
 
+// A Sweep of a natural shoulder along a junction corner's run: the run's points at the pad's height,
+// the section starting half a metre in on the pad and rolling down outward (to the right going round).
+// A tight corner gets a shallower bank, so the shoulder never folds over its own arc's centre.
+function shoulderSweep(p, corner, heightAt) {
+  const pts = [];
+  for (const q of corner.points) {
+    if (pts.length && Math.hypot(q[0] - pts[pts.length - 1][0], q[2] - pts[pts.length - 1][2]) < 0.2) continue;
+    pts.push([q[0], heightAt(q), q[2]]);
+  }
+  if (pts.length < 2) return null;
+  const n = p.natural;
+  const room = isFinite(corner.radius) ? 0.8 * corner.radius : Infinity;
+  const depth = Math.max(0.3, Math.min(n.depth, (room - n.edge - n.shoulder) / n.bank + n.drop));
+  const out = shoulderOut(n, 0, 0, 0, depth);
+  const outline = [[-0.5, -depth], [out[out.length - 1][0], -depth]];
+  const roles = ["grass"];
+  for (let i = out.length - 2; i >= 0; i--) { outline.push([out[i][0], out[i][1]]); roles.push(out[i + 1][2]); }
+  outline.push([0, 0]); roles.push(out[0][2]);
+  outline.push([-0.5, 0]); roles.push("deck");
+  roles.push("grass");                                    // the inside wall, back to the start
+  // Going round the pad this way the pad is on the run's right (a Sweep's +across), so the shoulder
+  // goes on its left: the same shape mirrored, still going round the same way.
+  const mirrored = outline.map(([a, b]) => [-a, b]).reverse();
+  const mroles = roles.slice(0, -1).reverse().concat(roles.slice(-1));
+  outline.length = 0; outline.push(...mirrored);
+  roles.length = 0; roles.push(...mroles);
+  const faces = {};
+  roles.forEach((role, i) => {
+    if (role === "grass") faces["band " + (i + 1)] = GRASS;
+  });
+  faces["start"] = faces["end"] = GRASS;
+  // Smooth handles through the run (Catmull-Rom), so the arcs stay round.
+  const points = pts.map((q, i) => {
+    const a = pts[Math.max(0, i - 1)], b = pts[Math.min(pts.length - 1, i + 1)];
+    const h = scaled(sub(b, a), i === 0 || i === pts.length - 1 ? 1 / 3 : 1 / 6);
+    return { position: r3(q), handle_in: r3(scaled(h, -1)), handle_out: r3(h) };
+  });
+  const r3o = (a) => [Math.round(a[0] * 1000) / 1000, Math.round(a[1] * 1000) / 1000];
+  return {
+    shape: { shape: "Sweep", outline: outline.map(r3o), follow: "Upright", rings: "Square", interval: 1, faces },
+    curve: { closed: false, points },
+  };
+}
+
 // The junction's children: the pad (tarmac on top, grass walls) out to each arm's mouth with a rounded
 // corner between every two neighbouring arms, a verge ring round it a step lower, and its road_node.
 // The pad lies on the plane that best fits the mouths, so a junction on a slope meets its arms.
@@ -626,7 +808,8 @@ function buildJunction(junction, object) {
   const depth = junction.depth;
   // The pad: tarmac on top only; its walls and bottom are grass, so where a round passes over its edge
   // it reads as a kerbed apron into the verge.
-  const pad = onPlane(outlineOf(arms, 0, junction.radius, OVERLAP), y, plane.b, plane.c, depth);
+  const padRing = outlineOf(arms, 0, junction.radius, OVERLAP);
+  const pad = onPlane(padRing, y, plane.b, plane.c, depth);
   const padFaces = { bottom: GRASS };
   for (let w = 1; w <= pad.outline.length; w++) padFaces["wall " + w] = GRASS;
   const padShape = { shape: "Extrude", outline: pad.outline, faces: padFaces, blend: junction.blend };
@@ -635,11 +818,277 @@ function buildJunction(junction, object) {
   // The verge ring: the same outline widened by the verge, a step below the deck, all grass. Inside the
   // pad the pad's deck stands above it; beyond, it meets each road's verge at the same height, and it
   // melts into the ground below by `verge_blend`, as a road's banks do.
-  if (verge > 0) {
+  if (arms.some((arm) => arm.natural)) {
+    // Natural shoulders: along each corner, from one arm's mouth round to the next, a Sweep of the
+    // same rolled shoulder the arms have, starting at the pad's edge, so pad and road edges are one.
+    padRing.corners.forEach((corner, i) => {
+      const prof = profileOf(arms[corner.from].profile);
+      const sh = shoulderSweep(prof, corner, (q) => y + plane.b * q[0] + plane.c * q[2]);
+      if (!sh) return;
+      sh.shape.blend = junction.verge_blend;
+      if (ground) sh.shape[JOINS] = ground;
+      children.push({ name: "shoulder " + (i + 1), components: { world_shape: sh.shape, curve: sh.curve, material: { asset: PLAIN } } });
+    });
+  } else if (verge > 0) {
     const ring = onPlane(outlineOf(arms, verge, junction.radius, OVERLAP), y - VERGE_STEP, plane.b, plane.c, depth);
     const vShape = { shape: "Extrude", outline: ring.outline, blend: junction.verge_blend };
     if (ground) vShape[JOINS] = ground;
     children.push({ name: "verge", position: ring.position, rotation: ring.rotation, scale: [1, depth, 1], components: { world_shape: vShape, material: { asset: GRASS } } });
   }
   return children;
+}
+
+// ---- Slip roads: on- and off-ramps -----------------------------------------------------------------
+// A `slip` joins a ramp road to the side of a main road (Design, "Junctions, ramps and roundabouts":
+// merges and diverges). It builds the taper: an extra lane that grows out of the main road's edge from
+// nothing to the ramp's width over `taper` metres, runs on at full width for `parallel` metres, and
+// meets the ramp there. It's one Sweep along the main road's own curve whose cross-section changes
+// along it (each curve point carries its own section, Playweft #632), so it follows the main road's
+// heights and bends. An off-ramp widens going forward along the main road; an on-ramp narrows. The
+// ramp road's own curve starts (off) or ends (on) at the "ramp mouth" the slip leaves as a child, so
+// it meets the full-width lane; the slip's road_link tells the road graph how they join.
+pw.defineComponent("slip", {
+  main: pw.object({ doc: "The road the slip joins." }),
+  ramp: pw.object({ doc: "The ramp road. Its curve should start (off-ramp) or end (on-ramp) at the slip's ramp mouth." }),
+  kind: pw.oneOf("off-ramp", "on-ramp", { doc: "off-ramp: the lane leaves the main road going forward along it; on-ramp: it joins it." }),
+  side: pw.oneOf("right", "left", { doc: "Which side of the main road, facing along its curve." }),
+  at: pw.float(0, { unit: "m", doc: "Where along the main road the slip starts: the taper's thin end for an off-ramp, the ramp mouth for an on-ramp." }),
+  taper: pw.float(60, { unit: "m", range: [5, 300], doc: "How long the lane takes to grow from nothing to full width." }),
+  parallel: pw.float(40, { unit: "m", range: [0, 300], doc: "How long it runs on at full width beside the main road." }),
+  blend: pw.float(-1, { unit: "m", range: [-1, 10], doc: "How far the taper melts into the ground; -1 takes the main road's." }),
+  ground: pw.object({ doc: "The object whose world shapes the slip is built among (the ground's group), as the roads' ground." }),
+}, {
+  build(slip, object) {
+    return buildSlip(slip, object);
+  },
+});
+
+// Where a slip road joins a main road, as game code reads the road graph.
+pw.defineComponent("road_link", {
+  main: pw.text("", { doc: "The main road's name." }),
+  ramp: pw.text("", { doc: "The ramp road's name." }),
+  kind: pw.text("off-ramp", { doc: "off-ramp or on-ramp." }),
+  side: pw.text("right", { doc: "Which side of the main road." }),
+  main_from: pw.float(0, { unit: "m", doc: "Where along the main road the slip starts." }),
+  main_to: pw.float(0, { unit: "m", doc: "Where along the main road it ends." }),
+  mouth: pw.float(0, { unit: "m", doc: "Where along the main road the ramp meets the full-width lane." }),
+});
+
+const SLIP_KINDS = ["off-ramp", "on-ramp"];
+// How wide a taper's thin end is beyond the main road's edge (it starts inside the main road's deck).
+const THIN = 0.6;
+const SIDES = ["right", "left"];
+
+// A curve's points carried through a matrix (twelve numbers, as object.refs gives), into the builder's space.
+function throughMatrix(curve, m) {
+  const at = (p) => [m[0] * p[0] + m[3] * p[1] + m[6] * p[2] + m[9], m[1] * p[0] + m[4] * p[1] + m[7] * p[2] + m[10], m[2] * p[0] + m[5] * p[1] + m[8] * p[2] + m[11]];
+  const dir = (v) => [m[0] * v[0] + m[3] * v[1] + m[6] * v[2], m[1] * v[0] + m[4] * v[1] + m[7] * v[2], m[2] * v[0] + m[5] * v[1] + m[8] * v[2]];
+  return {
+    closed: curve.closed,
+    points: curve.points.map((q) => ({ position: at(q.position), handle_in: dir(q.handle_in || [0, 0, 0]), handle_out: dir(q.handle_out || [0, 0, 0]) })),
+  };
+}
+
+// The taper's cross-section on the right of the path, `w` metres wide beyond the main road's edge `e`:
+// a deck strip from just inside the main road's deck out to e + w, then a verge a step lower and a bank
+// down into the ground, as a road's own section. Answers the outline and each band's role.
+function taperSection(p, e, w, mirror, natural) {
+  if (natural) return taperNatural(p, e, w, mirror);
+  const y = DECK_Y, vy = y - VERGE_STEP;
+  const inner = e - 0.3, out = e + w, vout = out + p.verge, foot = vout + p.depth * p.slope;
+  let outline = [[inner, -p.depth], [foot, -p.depth], [vout, vy], [out, vy], [out, y], [inner, y]];
+  let roles = ["grass", "grass", "grass", "kerb", "deck", "grass"];
+  if (mirror) {
+    // The same shape on the left, still going round the same way.
+    outline = outline.map(([a, b]) => [-a, b]).reverse();
+    roles = roles.slice(0, -1).reverse().concat(roles.slice(-1));
+  }
+  return { outline: outline.map(([a, b]) => [Math.round(a * 1000) / 1000, Math.round(b * 1000) / 1000]), roles };
+}
+
+// The taper's section for a natural main road: its deck carries on the main road's crossfall out to
+// e + w, then the same edge strip, rolled shoulder and bank as the road's own.
+function taperNatural(p, e, w, mirror) {
+  const n = p.natural, cf = n.crossfall, depth = n.depth;
+  const yAt = (x) => DECK_Y - x * cf;
+  const inner = e - 0.3, out = e + w;
+  const sh = shoulderOut(n, out, yAt(out), cf, depth);
+  let outline = [[inner, -depth], [sh[sh.length - 1][0], -depth]];
+  let roles = ["grass"];
+  for (let i = sh.length - 2; i >= 0; i--) { outline.push([sh[i][0], sh[i][1]]); roles.push(sh[i + 1][2]); }
+  outline.push([out, yAt(out)]); roles.push(sh[0][2]);
+  outline.push([inner, yAt(inner)]); roles.push("deck");
+  roles.push("grass");
+  if (mirror) {
+    outline = outline.map(([a, b]) => [-a, b]).reverse();
+    roles = roles.slice(0, -1).reverse().concat(roles.slice(-1));
+  }
+  return { outline: outline.map(([a, b]) => [Math.round(a * 1000) / 1000, Math.round(b * 1000) / 1000]), roles };
+}
+
+function buildSlip(slip, object) {
+  const main = object.refs && object.refs.main;
+  if (!main || !main.components.curve || !main.components.road) return [];
+  const kind = pick(slip.kind, SLIP_KINDS), side = pick(slip.side, SIDES);
+  const mp = profileOf(main.components.road.profile);
+  const nat = isNatural(main.components.road);
+  const ramp = object.refs && object.refs.ramp;
+  const rp = profileOf(ramp && ramp.components.road ? ramp.components.road.profile : "slip road");
+  const curve = throughMatrix(main.components.curve, main.matrix);
+  const m = measure(curve);
+  const e = mp.deck + mp.kerb, width = 2 * rp.deck;
+  // Off-ramp: thin end at `at`, widening to full over the taper, then full to the mouth.
+  // On-ramp: the mouth at `at`, full along the parallel, then narrowing to nothing.
+  const t = Math.max(1, slip.taper), par = Math.max(0, slip.parallel);
+  const from = Math.max(0, Math.min(m.total, slip.at)), to = Math.min(m.total, from + t + par);
+  if (to - from < 1) return [];
+  const stations = kind === "off-ramp"
+    ? [[from, THIN], [from + t, width], [to, width]]
+    : [[from, width], [from + par, width], [to, THIN]];
+  const mirror = side === "left";
+  // The taper's curve: the main road's curve cut at each station, so every station is a curve point
+  // carrying its own section.
+  const points = [];
+  for (let k = 0; k + 1 < stations.length; k++) {
+    const [d0, w0] = stations[k], [d1] = stations[k + 1];
+    if (d1 - d0 < 0.01) continue;
+    const pts = piece(m, d0, d1);
+    if (points.length) { points[points.length - 1].handle_out = pts[0].handle_out; pts.shift(); }
+    else pts[0].section = taperSection(mp, e, w0, mirror, nat).outline;
+    pts[pts.length - 1].section = taperSection(mp, e, stations[k + 1][1], mirror, nat).outline;
+    // Points inside a stretch (where the main curve has a point of its own) take the width they fall at.
+    for (let i = 0; i + 1 < pts.length; i++) {
+      if (pts[i].section) continue;
+      const along = nearestAlong(m, pts[i].position, d0, d1);
+      const f = (along - d0) / (d1 - d0);
+      pts[i].section = taperSection(mp, e, w0 + (stations[k + 1][1] - w0) * f, mirror, nat).outline;
+    }
+    for (const q of pts) points.push(q);
+  }
+  const { outline, roles } = taperSection(mp, e, width, mirror, nat);
+  const faces = {};
+  roles.forEach((role, i) => {
+    if (role === "grass") faces["band " + (i + 1)] = GRASS;
+    else if (role === "kerb") faces["band " + (i + 1)] = KERB;
+  });
+  faces["start"] = faces["end"] = GRASS;
+  const ground = object.refs && object.refs.ground ? object.refs.ground.id : null;
+  const blend = slip.blend >= 0 ? slip.blend : main.components.road.blend != null ? main.components.road.blend : 1.5;
+  const interval = main.components.road.interval > 0 ? main.components.road.interval : 2;
+  const shape = { shape: "Sweep", outline, follow: "Upright", rings: "Square", interval, faces, blend };
+  if (ground) shape[JOINS] = ground;
+  // The ramp mouth: the middle of the full-width lane where the ramp road meets it.
+  const mouthAt = kind === "off-ramp" ? to : from;
+  const sgn = mirror ? -1 : 1;
+  const path = pw.curve.path(curve);
+  const mouth = path.offset(mouthAt, sgn * (e + width / 2), 0);
+  const r3d = (v) => Math.round(v * 1000) / 1000;
+  return [
+    {
+      name: "taper",
+      components: { world_shape: shape, curve: { closed: false, points }, material: { asset: mp.material } },
+    },
+    {
+      name: "ramp mouth",
+      position: mouth.map(r3d),
+      components: {
+        road_link: {
+          main: main.name, ramp: ramp ? ramp.name : "", kind, side,
+          main_from: r3d(from), main_to: r3d(to), mouth: r3d(mouthAt),
+        },
+      },
+    },
+  ];
+}
+
+// How far along a measured curve the point nearest `q` is, between d0 and d1.
+function nearestAlong(m, q, d0, d1) {
+  const path = { at: (d) => { const [i, u] = locate(m, d); return bezier(m.spans[i], u); } };
+  let best = d0, bestD = Infinity;
+  for (let d = d0; d <= d1; d += 0.5) {
+    const p = path.at(d), e = Math.hypot(p[0] - q[0], p[2] - q[2]);
+    if (e < bestD) { bestD = e; best = d; }
+  }
+  return best;
+}
+
+// ---- Approaches: turn lanes ----------------------------------------------------------------------
+// An `approach` sets one arm of a junction apart (Design, "Junction control, turn lanes and crossings").
+// For now it adds turn lanes: the arm widens on the turning side over `taper` metres, then runs a full
+// lane wide for `length` metres up to the mouth. The approach builds that lane along the road's own
+// curve (the slip's widening Sweep); the junction, naming the approach in approach_1…, widens its pad
+// at that mouth so the lane runs on into it. Sides are as the traffic coming in sees them.
+pw.defineComponent("approach", {
+  junction: pw.object({ doc: "The junction this arm belongs to. Name this approach on the junction too (approach_1…)." }),
+  road: pw.object({ doc: "The arm's road." }),
+  dir: pw.oneOf("in", "out", { doc: "Which of the road's arms at the junction: in where going forward along the road enters it, out where it leaves." }),
+  turn: pw.oneOf("none", "left", "right", "both", { doc: "Turn lanes: on the incoming traffic's left, right or both sides." }),
+  length: pw.float(40, { unit: "m", range: [5, 200], doc: "How long the full-width turn lane runs before the mouth." }),
+  taper: pw.float(20, { unit: "m", range: [5, 200], doc: "How long it takes to widen to full width." }),
+  ground: pw.object({ doc: "The ground's group, as the roads' ground." }),
+}, {
+  build(approach, object) {
+    return buildApproach(approach, object);
+  },
+});
+
+function buildApproach(approach, object) {
+  const j = object.refs && object.refs.junction, road = object.refs && object.refs.road;
+  if (!j || !j.components.junction || !road || !road.components.curve) return [];
+  const turn = pick(approach.turn, TURNS);
+  if (turn === "none") return [];
+  const dir = pick(approach.dir, ["in", "out"]);
+  const p = profileOf(road.components.road ? road.components.road.profile : "two-lane");
+  const nat = isNatural(road.components.road);
+  const curve = throughMatrix(road.components.curve, road.matrix);
+  const m = measure(curve);
+  const path = pw.curve.path(curve);
+  const centre = [j.matrix[9], j.matrix[10], j.matrix[11]];
+  const gaps = within(path, centre, mouthOf(j.components.junction));
+  if (!gaps.length) return [];
+  // The mouth this arm reaches: the gap's start for an incoming arm, its end for an outgoing one.
+  const g = gaps[0];
+  const dm = dir === "in" ? g[0] : g[1];
+  if ((dir === "in" && dm <= 0.01) || (dir === "out" && dm >= m.total - 0.01)) return [];
+  const e = p.deck + p.kerb, w = p.deck, len = approach.length, tap = approach.taper;
+  // Stations along the road, from far to the mouth (and 0.5 m on into the pad).
+  const stations = dir === "in"
+    ? [[dm - len - tap, THIN], [dm - len, w], [dm + OVERLAP, w]]
+    : [[dm - OVERLAP, w], [dm + len, w], [dm + len + tap, THIN]];
+  for (const st of stations) st[0] = Math.max(0, Math.min(m.total, st[0]));
+  // Incoming traffic drives forward along the road on an "in" arm, backward on an "out" arm; its left
+  // is the road's left (−across) on "in", the road's right on "out".
+  const sides = [];
+  if (turn === "left" || turn === "both") sides.push(dir === "in" ? "left" : "right");
+  if (turn === "right" || turn === "both") sides.push(dir === "in" ? "right" : "left");
+  const ground = object.refs && object.refs.ground ? object.refs.ground.id : null;
+  const blend = road.components.road && road.components.road.blend != null ? road.components.road.blend : 1.5;
+  return sides.map((side) => {
+    const mirror = side === "left";
+    const points = [];
+    for (let k = 0; k + 1 < stations.length; k++) {
+      const [d0, w0] = stations[k], [d1, w1] = stations[k + 1];
+      if (d1 - d0 < 0.01) continue;
+      const pts = piece(m, d0, d1);
+      if (points.length) { points[points.length - 1].handle_out = pts[0].handle_out; pts.shift(); }
+      else pts[0].section = taperSection(p, e, w0, mirror, nat).outline;
+      pts[pts.length - 1].section = taperSection(p, e, w1, mirror, nat).outline;
+      for (let i = 0; i + 1 < pts.length; i++) {
+        if (pts[i].section) continue;
+        const f = (nearestAlong(m, pts[i].position, d0, d1) - d0) / (d1 - d0);
+        pts[i].section = taperSection(p, e, w0 + (w1 - w0) * f, mirror, nat).outline;
+      }
+      for (const q of pts) points.push(q);
+    }
+    const { outline, roles } = taperSection(p, e, w, mirror, nat);
+    const faces = {};
+    roles.forEach((role, i) => {
+      if (role === "grass") faces["band " + (i + 1)] = GRASS;
+      else if (role === "kerb") faces["band " + (i + 1)] = KERB;
+    });
+    faces["start"] = faces["end"] = GRASS;
+    const shape = { shape: "Sweep", outline, follow: "Upright", rings: "Square", interval: 1, faces, blend };
+    if (ground) shape[JOINS] = ground;
+    return { name: "turn lane " + side, components: { world_shape: shape, curve: { closed: false, points }, material: { asset: p.material } } };
+  });
 }

@@ -65,6 +65,9 @@ const CUT_BELOW = 0.08;
 const CUT_BLEND = 0;
 // How far a junction's cutting reaches along each arm, past the mouth.
 const CUT_REACH = 3;
+// A roundabout's islands stand this far above the deck, kerbed, and go this deep.
+const ISLAND_UP = 0.15;
+const ISLAND_DEPTH = 0.6;
 const PROFILE_NAMES = ["two-lane", "back lane", "slip road", "freeway"];
 // A bridge's deck carries the same markings between parapets this wide and high, over a slab this deep.
 const BRIDGE = { parapet: 0.5, height: 1.0, under: 1.4 };
@@ -530,7 +533,11 @@ pw.defineComponent("junction", {
   approach_4: pw.object({ group: "Approaches", doc: "Another approach." }),
   approach_5: pw.object({ group: "Approaches", doc: "Another approach." }),
   approach_6: pw.object({ group: "Approaches", doc: "Another approach." }),
-  mouth: pw.float(12, { unit: "m", range: [3, 60], doc: "How far from the junction's centre its roads stop. A road reads this too, so name the junction on the road (junction_1…) as well as here." }),
+  kind: pw.oneOf("crossroads", "roundabout", { group: "Shape", doc: "crossroads: one pad with a rounded corner between each two arms. roundabout: a ring round a raised island, a flared entry from each arm and a splitter island in each mouth." }),
+  island: pw.float(8, { unit: "m", range: [2, 60], group: "Shape", doc: "A roundabout's island radius." }),
+  ring: pw.float(8, { unit: "m", range: [4, 20], group: "Shape", doc: "A roundabout's carriageway width round the island." }),
+  flare: pw.float(10, { unit: "m", range: [2, 40], group: "Shape", doc: "A roundabout's entry and exit radius, between each arm's edge and the ring." }),
+  mouth: pw.float(12, { unit: "m", range: [3, 80], doc: "How far from the junction's centre its roads stop. A road reads this too, so name the junction on the road (junction_1…) as well as here." }),
   radius: pw.float(8, { unit: "m", range: [0, 50], doc: "The corners' radius. A corner too tight for it between two arms shrinks to fit." }),
   depth: pw.float(0.6, { unit: "m", range: [0.05, 5], doc: "How deep the pad goes below the deck." }),
   blend: pw.float(0, { unit: "m", range: [0, 10], doc: "How far the pad and its verge melt into the ground they join. 0 keeps the pad's edge crisp against its verge, a 6 cm step as along the roads; 3 frays it into the grass." }),
@@ -789,6 +796,125 @@ function rulesOf(junction, object, arms) {
   });
 }
 
+// A roundabout's outline: the ring's outer circle (radius `outer` + widen) joined to each arm's edges by
+// an arc of `flare` (less widen) tangent to both the edge and the circle, the arms carried `reach`
+// metres out past their mouths. Answers the ring of points (going round as outlineOf does) with
+// `corners`: each run from one arm's front mouth end round the circle to the next arm's back mouth end.
+function roundaboutOutline(arms, widen, outer, flare, reach) {
+  const R = outer + widen, rf = Math.max(0.5, flare - widen), n = arms.length;
+  const ring = [];
+  ring.corners = [];
+  const ang = (p) => Math.atan2(p[2], p[0]);
+  const arcPts = (c, r, a1, a2, step) => {
+    let sweep = a2 - a1;
+    while (sweep > Math.PI) sweep -= 2 * Math.PI;
+    while (sweep < -Math.PI) sweep += 2 * Math.PI;
+    const k = Math.max(2, Math.ceil(Math.abs(sweep) * r / step));
+    const out = [];
+    for (let i = 1; i < k; i++) {
+      const a = a1 + sweep * (i / k);
+      out.push([c[0] + Math.cos(a) * r, 0, c[2] + Math.sin(a) * r]);
+    }
+    return out;
+  };
+  // The fillet from one edge of an arm to the circle: the points from the edge's tangent point to the
+  // circle's, or null when the edge passes too far out to meet it.
+  const fillet = (arm, side) => {
+    const left = [-arm.u[2], 0, arm.u[0]];
+    const sgn = side === "front" ? 1 : -1;
+    const h = arm.half + widen + (side === "front" ? (arm.wFront || 0) : (arm.wBack || 0));
+    const E = add(arm.p, scaled(left, sgn * h));
+    const nrm = scaled(left, sgn);
+    const A = add(E, scaled(nrm, rf));
+    const au = dotXZ(A, arm.u), aa = A[0] * A[0] + A[2] * A[2];
+    const disc = au * au - aa + (R + rf) * (R + rf);
+    if (disc < 0) return null;
+    const t = au - Math.sqrt(disc);
+    if (t < -reach) return null;
+    const C = sub(A, scaled(arm.u, t));
+    const Tl = sub(E, scaled(arm.u, t));
+    const cl = Math.hypot(C[0], C[2]);
+    const Tc = [C[0] * R / cl, 0, C[2] * R / cl];
+    const pts = [Tl].concat(arcPts(C, rf, Math.atan2(Tl[2] - C[2], Tl[0] - C[0]), Math.atan2(Tc[2] - C[2], Tc[0] - C[0]), 0.75), [Tc]);
+    return { E, pts, Tc };
+  };
+  const ends = arms.map((arm) => ({ front: fillet(arm, "front"), back: fillet(arm, "back") }));
+  for (let i = 0; i < n; i++) {
+    const arm = arms[i], next = arms[(i + 1) % n];
+    const left = [-arm.u[2], 0, arm.u[0]];
+    const hb = arm.half + widen + (arm.wBack || 0), hf = arm.half + widen + (arm.wFront || 0);
+    const backEnd = add(add(arm.p, scaled(left, -hb)), scaled(arm.u, reach));
+    const frontEnd = add(add(arm.p, scaled(left, hf)), scaled(arm.u, reach));
+    ring.push(backEnd, frontEnd);
+    const corner = { from: i, points: [frontEnd], radius: rf };
+    const f = ends[i].front, b = ends[(i + 1) % n].back;
+    if (f && b) {
+      // Out along this arm's front edge, round its flare, round the circle, round the next arm's flare.
+      // The circle runs from this flare round to the next, counter-clockwise; it can't be longer than
+      // the gap between the two arms, so a longer one means the flares already meet (no circle between).
+      const a1 = ang(f.Tc);
+      let a2 = ang(b.Tc);
+      while (a2 < a1) a2 += 2 * Math.PI;
+      let gap = ang(next.p) - ang(arm.p);
+      while (gap <= 0) gap += 2 * Math.PI;
+      let run;
+      if (a2 - a1 < gap) run = f.pts.concat(bigArc(R, a1, a2), b.pts.slice().reverse());
+      else {
+        // The two flares cross before they reach the ring: cut both where they cross, so the outline
+        // meets in a point there and never crosses itself. The shoulder splits at that point too.
+        const x = crossing(f.pts, b.pts);
+        if (x) {
+          run = f.pts.slice(0, x.i + 1).concat([x.p], b.pts.slice(0, x.j + 1).reverse());
+          corner.split = x.i + 2;                    // the index of the meeting point in corner.points
+        } else run = f.pts.concat(b.pts.slice().reverse());
+      }
+      for (const q of run) { ring.push(q); corner.points.push(q); }
+    }
+    const nl = [-next.u[2], 0, next.u[0]];
+    const nb = add(add(next.p, scaled(nl, -(next.half + widen + (next.wBack || 0)))), scaled(next.u, reach));
+    corner.points.push(nb);
+    ring.corners.push(corner);
+  }
+  return ring;
+}
+
+// Where two polylines cross (in x and z): the segment indices and the point, or null.
+function crossing(a, b) {
+  for (let i = 0; i + 1 < a.length; i++) {
+    for (let j = 0; j + 1 < b.length; j++) {
+      const p = a[i], r = sub(a[i + 1], a[i]), q = b[j], t2 = sub(b[j + 1], b[j]);
+      const den = r[0] * t2[2] - r[2] * t2[0];
+      if (Math.abs(den) < 1e-9) continue;
+      const qp = sub(q, p);
+      const t = (qp[0] * t2[2] - qp[2] * t2[0]) / den, u = (qp[0] * r[2] - qp[2] * r[0]) / den;
+      if (t >= 0 && t <= 1 && u >= 0 && u <= 1) return { i, j, p: add(p, scaled(r, t)) };
+    }
+  }
+  return null;
+}
+
+// Points along the circle of radius R from angle a1 up to a2 (counter-clockwise in atan2's sense).
+function bigArc(R, a1, a2) {
+  const k = Math.max(2, Math.ceil((a2 - a1) * R / 1.0));
+  const out = [];
+  for (let i = 1; i < k; i++) {
+    const a = a1 + (a2 - a1) * (i / k);
+    out.push([Math.cos(a) * R, 0, Math.sin(a) * R]);
+  }
+  return out;
+}
+
+// A flat-topped raised island on the plane: an Extrude with kerb walls and a grass top.
+function islandChild(name, outline2d, top, plane, ground) {
+  const ring = outline2d.map(([x, z]) => [x, 0, z]);
+  const isl = onPlane(ring, top, plane.b, plane.c, ISLAND_DEPTH);
+  const faces = { top: GRASS, bottom: GRASS };
+  for (let w = 1; w <= isl.outline.length; w++) faces["wall " + w] = KERB;
+  const shape = { shape: "Extrude", outline: isl.outline, faces, blend: 0 };
+  if (ground) shape[JOINS] = ground;
+  return { name, position: isl.position, rotation: isl.rotation, scale: [1, ISLAND_DEPTH, 1], components: { world_shape: shape, material: { asset: GRASS } } };
+}
+
 // A Sweep of a natural shoulder along a junction corner's run: the run's points at the pad's height,
 // the section starting half a metre in on the pad and rolling down outward (to the right going round).
 // A tight corner gets a shallower bank, so the shoulder never folds over its own arc's centre.
@@ -827,11 +953,12 @@ function shoulderSweep(p, corner, heightAt) {
   const mroles = roles.slice(0, -1).reverse().concat(roles.slice(-1));
   outline.length = 0; outline.push(...mirrored);
   roles.length = 0; roles.push(...mroles);
+  // The end faces stay the pad's tarmac: they stand at the mouths, where a grass face showed as a thin
+  // green line across the road wherever it rose a hair above the deck.
   const faces = {};
   roles.forEach((role, i) => {
     if (role === "grass") faces["band " + (i + 1)] = GRASS;
   });
-  faces["start"] = faces["end"] = GRASS;
   // Smooth handles through the run (Catmull-Rom), so the arcs stay round.
   const points = pts.map((q, i) => {
     const a = pts[Math.max(0, i - 1)], b = pts[Math.min(pts.length - 1, i + 1)];
@@ -885,7 +1012,11 @@ function buildJunction(junction, object) {
   const depth = junction.depth;
   // The pad: tarmac on top only; its walls and bottom are grass, so where a round passes over its edge
   // it reads as a kerbed apron into the verge.
-  const padRing = outlineOf(arms, 0, junction.radius, OVERLAP);
+  const round = pick(junction.kind, ["crossroads", "roundabout"]) === "roundabout";
+  const outer = (junction.island > 0 ? junction.island : 8) + (junction.ring > 0 ? junction.ring : 8);
+  const flareR = junction.flare > 0 ? junction.flare : 10;
+  const shapeOf = (widen, reach) => round ? roundaboutOutline(arms, widen, outer, flareR, reach) : outlineOf(arms, widen, junction.radius, reach);
+  const padRing = shapeOf(0, OVERLAP);
   const pad = onPlane(padRing, y, plane.b, plane.c, depth);
   const padFaces = { bottom: GRASS };
   for (let w = 1; w <= pad.outline.length; w++) padFaces["wall " + w] = GRASS;
@@ -904,7 +1035,7 @@ function buildJunction(junction, object) {
     }, 0);
     // It reaches CUT_REACH along each arm, well into the arm's own cutting, so no sliver of ground is
     // left standing between the two.
-    const cut = onPlane(outlineOf(arms, reachOut, junction.radius, CUT_REACH), y - CUT_BELOW + CUT_H, plane.b, plane.c, CUT_H);
+    const cut = onPlane(shapeOf(reachOut, CUT_REACH), y - CUT_BELOW + CUT_H, plane.b, plane.c, CUT_H);
     children.push({
       name: "clear",
       position: cut.position, rotation: cut.rotation, scale: [1, CUT_H, 1],
@@ -916,17 +1047,45 @@ function buildJunction(junction, object) {
     // same rolled shoulder the arms have, starting at the pad's edge, so pad and road edges are one.
     padRing.corners.forEach((corner, i) => {
       const prof = profileOf(arms[corner.from].profile);
-      const sh = shoulderSweep(prof, corner, (q) => y + plane.b * q[0] + plane.c * q[2]);
-      if (!sh) return;
-      sh.shape.blend = junction.verge_blend;
-      if (ground) sh.shape[JOINS] = ground;
-      children.push({ name: "shoulder " + (i + 1), components: { world_shape: sh.shape, curve: sh.curve, material: { asset: PLAIN } } });
+      // A corner that meets in a point (two flares crossing) gets a shoulder each side of the point.
+      const parts = corner.split ? [
+        { from: corner.from, points: corner.points.slice(0, corner.split + 1), radius: corner.radius },
+        { from: corner.from, points: corner.points.slice(corner.split), radius: corner.radius },
+      ] : [corner];
+      parts.forEach((part, k) => {
+        const sh = shoulderSweep(prof, part, (q) => y + plane.b * q[0] + plane.c * q[2]);
+        if (!sh) return;
+        sh.shape.blend = junction.verge_blend;
+        if (ground) sh.shape[JOINS] = ground;
+        children.push({ name: "shoulder " + (i + 1) + (parts.length > 1 ? "abc"[k] : ""), components: { world_shape: sh.shape, curve: sh.curve, material: { asset: PLAIN } } });
+      });
     });
   } else if (verge > 0) {
-    const ring = onPlane(outlineOf(arms, verge, junction.radius, OVERLAP), y - VERGE_STEP, plane.b, plane.c, depth);
+    const ring = onPlane(shapeOf(verge, OVERLAP), y - VERGE_STEP, plane.b, plane.c, depth);
     const vShape = { shape: "Extrude", outline: ring.outline, blend: junction.verge_blend };
     if (ground) vShape[JOINS] = ground;
     children.push({ name: "verge", position: ring.position, rotation: ring.rotation, scale: [1, depth, 1], components: { world_shape: vShape, material: { asset: GRASS } } });
+  }
+  if (round) {
+    // The island in the middle, and a splitter island in each arm's mouth along its centre line, from
+    // just off the ring out onto the road: wide and round by the ring, narrowing to a point.
+    const islandR = junction.island > 0 ? junction.island : 8;
+    const disc = [];
+    for (let k = 0; k < 32; k++) disc.push([Math.cos(k * Math.PI / 16) * islandR, Math.sin(k * Math.PI / 16) * islandR]);
+    children.push(islandChild("island", disc, y + ISLAND_UP, plane, ground));
+    arms.forEach((arm, i) => {
+      const left = [-arm.u[2], 0, arm.u[0]];
+      const at = (d, across) => add(add(arm.p, scaled(arm.u, d - mouthOf(junction))), scaled(left, across));
+      const w0 = Math.min(1.6, arm.half * 0.45), d0 = outer + 1.5, d1 = mouthOf(junction) + 4;
+      if (d1 - d0 < 2 * w0 + 2) return;
+      const c0 = d0 + w0, pts = [];
+      for (let k = 0; k <= 8; k++) {                  // the round end by the ring, from one side to the other
+        const a = Math.PI / 2 + Math.PI * (k / 8);
+        pts.push(at(c0 + Math.cos(a) * w0, Math.sin(a) * w0));
+      }
+      pts.push(at(d1, -0.3), at(d1 + 0.3, 0), at(d1, 0.3));
+      children.push(islandChild("splitter " + (i + 1), pts.map((q) => [q[0], q[2]]), y + ISLAND_UP, plane, ground));
+    });
   }
   return children;
 }
@@ -949,6 +1108,7 @@ pw.defineComponent("slip", {
   taper: pw.float(60, { unit: "m", range: [5, 300], doc: "How long the lane takes to grow from nothing to full width." }),
   parallel: pw.float(40, { unit: "m", range: [0, 300], doc: "How long it runs on at full width beside the main road." }),
   blend: pw.float(-1, { unit: "m", range: [-1, 10], doc: "How far the taper melts into the ground; -1 takes the main road's." }),
+  terrain: pw.object({ doc: "The ground's own shape (its Height Map): where the main road cuts the ground, the taper does too." }),
   ground: pw.object({ doc: "The object whose world shapes the slip is built among (the ground's group), as the roads' ground." }),
 }, {
   build(slip, object) {
@@ -1019,6 +1179,27 @@ function taperNatural(p, e, w, mirror) {
   return { outline: outline.map(([a, b]) => [Math.round(a * 1000) / 1000, Math.round(b * 1000) / 1000]), roles };
 }
 
+// A taper's cutting: under the taper's top surface by CUT_BELOW from inside the main road's deck out to
+// the end of its shoulder, then up the cutting side to CUT_H. Same number of points at every width, so
+// it lofts with the taper.
+function taperCut(p, e, w, mirror, natural) {
+  const cf = natural ? p.natural.crossfall : 0;
+  const yAt = (x) => DECK_Y - x * cf;
+  const inner = e - 0.3, out = e + w;
+  let chain;
+  if (natural) chain = [[inner, yAt(inner)], [out, yAt(out)]].concat(shoulderOut(p.natural, out, yAt(out), cf, p.natural.depth).slice(0, 5).map(([a, b]) => [a, b]));
+  else {
+    const vy = DECK_Y - VERGE_STEP;
+    chain = [[inner, DECK_Y], [out, DECK_Y], [out + 0.01, vy], [out + p.verge, vy], [out + p.verge + 0.01, vy], [out + p.verge + 0.02, vy], [out + p.verge + 0.03, vy]];
+  }
+  chain = chain.map(([a, b]) => [a, b - CUT_BELOW]);
+  const [xe, ye] = chain[chain.length - 1];
+  let outline = chain.concat([[xe + (CUT_H - ye) * CUT_SLOPE, CUT_H], [inner, CUT_H]]);
+  // Round the outline the other way for a Sweep: the chain runs along the bottom, left to right.
+  if (mirror) outline = outline.map(([a, b]) => [-a, b]).reverse();
+  return outline.map(([a, b]) => [Math.round(a * 1000) / 1000, Math.round(b * 1000) / 1000]);
+}
+
 function buildSlip(slip, object) {
   const main = object.refs && object.refs.main;
   if (!main || !main.components.curve || !main.components.road) return [];
@@ -1047,14 +1228,16 @@ function buildSlip(slip, object) {
     if (d1 - d0 < 0.01) continue;
     const pts = piece(m, d0, d1);
     if (points.length) { points[points.length - 1].handle_out = pts[0].handle_out; pts.shift(); }
-    else pts[0].section = taperSection(mp, e, w0, mirror, nat).outline;
+    else { pts[0].section = taperSection(mp, e, w0, mirror, nat).outline; pts[0]._w = w0; }
     pts[pts.length - 1].section = taperSection(mp, e, stations[k + 1][1], mirror, nat).outline;
+    pts[pts.length - 1]._w = stations[k + 1][1];
     // Points inside a stretch (where the main curve has a point of its own) take the width they fall at.
     for (let i = 0; i + 1 < pts.length; i++) {
       if (pts[i].section) continue;
       const along = nearestAlong(m, pts[i].position, d0, d1);
       const f = (along - d0) / (d1 - d0);
-      pts[i].section = taperSection(mp, e, w0 + (stations[k + 1][1] - w0) * f, mirror, nat).outline;
+      pts[i]._w = w0 + (stations[k + 1][1] - w0) * f;
+      pts[i].section = taperSection(mp, e, pts[i]._w, mirror, nat).outline;
     }
     for (const q of pts) points.push(q);
   }
@@ -1074,9 +1257,27 @@ function buildSlip(slip, object) {
   const mouthAt = kind === "off-ramp" ? to : from;
   const sgn = mirror ? -1 : 1;
   const path = pw.curve.path(curve);
-  const mouth = path.offset(mouthAt, sgn * (e + width / 2), 0);
+  // On a crowned (natural) main road the lane is lower out at its edge by the crossfall: the ramp meets
+  // it there.
+  const fall = nat ? (e + width / 2) * mp.natural.crossfall : 0;
+  const mouth = path.offset(mouthAt, sgn * (e + width / 2), -fall);
   const r3d = (v) => Math.round(v * 1000) / 1000;
-  return [
+  const widths = points.map((q) => q._w);
+  for (const q of points) delete q._w;
+  // Where the main road cuts the ground, so does the taper, widening with it.
+  const terrain = object.refs && object.refs.terrain ? object.refs.terrain.id : null;
+  const cutKids = [];
+  if (terrain) {
+    const cutPts = points.map((q, i) => ({ position: q.position, handle_in: q.handle_in, handle_out: q.handle_out, section: taperCut(mp, e, widths[i] != null ? widths[i] : width, mirror, nat) }));
+    cutKids.push({
+      name: "clear",
+      components: {
+        world_shape: { shape: "Sweep", operation: "Subtract", outline: taperCut(mp, e, width, mirror, nat), follow: "Upright", rings: "Square", interval: 1, cuts: terrain, blend: CUT_BLEND },
+        curve: { closed: false, points: cutPts },
+      },
+    });
+  }
+  return cutKids.concat([
     {
       name: "taper",
       components: { world_shape: shape, curve: { closed: false, points }, material: { asset: mp.material } },
@@ -1091,7 +1292,7 @@ function buildSlip(slip, object) {
         },
       },
     },
-  ];
+  ]);
 }
 
 // How far along a measured curve the point nearest `q` is, between d0 and d1.

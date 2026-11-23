@@ -45,7 +45,7 @@ param warn_b: f32 = 0.0 range(0, 100);
 // the way out along its arm), half-width]; with a priority road, through_1/2 name the two arms it runs
 // between [i, j] and through_w/through_d say how it's marked [lanes out, line width, edge width, centre
 // (1 dashed, 2 solid)] and [dash, period]; a roundabout's ring is [island radius, outer radius].
-param role: f32 = 0.0 range(0, 4);    // 0 deck, 1 pad, 2 roundabout, 3 slip taper, 4 turn lane
+param role: f32 = 0.0 range(0, 5);    // 0 deck, 1 pad, 2 roundabout, 3 slip taper, 4 turn lane, 5 left-turn pocket
 param arms: f32 = 0.0 range(0, 6);
 param mouth_1: vec4f = (0.0, 0.0, 0.0, 0.0);
 param mouth_2: vec4f = (0.0, 0.0, 0.0, 0.0);
@@ -73,6 +73,11 @@ param taper_w2: vec4f = (0.0, 0.0, 0.0, 0.0);
 param lane: vec4f = (0.0, 0.0, 1.0, 1.0);
 param arrows: vec4f = (0.0, 0.0, 0.0, 0.0);
 param lane_line: vec4f = (0.0, 0.0, 0.0, 0.0);
+// A left-turn pocket (role 5): the road laid again over an approach, widening by half a lane each side so
+// a left-turn lane opens in its middle (US style). [u where it is thin, u where it is full, half a lane,
+// 0]; its lane is [0, through lane width, which way traffic drives along u, 2], and arrows and lane_line
+// as a turn lane's.
+param pocket: vec4f = (0.0, 0.0, 0.0, 0.0);
 // Wear: how strongly the wheel tracks, braking grime, dirty edges and patches show (0 none, 1 full).
 param wear: f32 = 1.0 range(0, 2);
 
@@ -349,7 +354,10 @@ fn surface(s: SurfaceIn) -> Surface {
     let warning = (params.warn_a > 0.0 && along < params.stop_a + params.warn_a)
         || (params.warn_b > 0.0 && params.stop_b > 0.0 && along > params.stop_b - params.warn_b);
     let lw = params.line_width;
-    if params.median <= 0.0 {
+    // A left-turn pocket draws its own lanes; the road's centre, lane and edge lines are not its.
+    let own_lanes = params.role < 4.5;
+    if !own_lanes {
+    } else if params.median <= 0.0 {
         if params.centre >= 1.5 || (warning && params.centre >= 0.5) {
             ypaint = max(ypaint, max(stroke(across - lw, lw * 0.5, aa), stroke(across + lw, lw * 0.5, aa)));
         } else if params.centre >= 0.5 {
@@ -363,12 +371,12 @@ fn surface(s: SurfaceIn) -> Surface {
         }
     }
     // Lane lines between the lanes each way.
-    for (var k = 1.0; k < params.lanes; k = k + 1.0) {
+    for (var k = 1.0; own_lanes && k < params.lanes; k = k + 1.0) {
         let at = params.median + k * params.lane_width;
         paint = max(paint, stroke(side - at, params.line_width * 0.5, aa) * dashed(along, params.lane_dash, params.period, aa));
     }
     // The edge line where the lanes end, and the hard shoulder beyond it.
-    if params.edge_width > 0.0 && lanes_out < params.half_width {
+    if own_lanes && params.edge_width > 0.0 && lanes_out < params.half_width {
         let edge_line = stroke(side - lanes_out, params.edge_width * 0.5, aa);
         // A one-way road's left edge (driving along u, its left is -across) is yellow.
         if params.one_way > 0.5 && across < 0.0 { ypaint = max(ypaint, edge_line); }
@@ -416,7 +424,7 @@ fn surface(s: SurfaceIn) -> Surface {
     }
 
     // A turn lane: its two arrows, and the line across it.
-    if params.role > 3.5 {
+    if params.role > 3.5 && params.role < 4.5 {
         let dir = params.lane.z;
         let lat = (across - params.lane.x) * -dir;
         if params.arrows.x > 0.0 {
@@ -426,6 +434,37 @@ fn surface(s: SurfaceIn) -> Surface {
         // Its line runs on from the deck's, from lane_line.z to lane_line.w across the road.
         if params.lane_line.y > 0.5 {
             paint = max(paint, way_in((params.lane_line.x - along) * dir, abs(across), params.lane_line.z, params.lane_line.w, params.lane_line.y, aa));
+        }
+    }
+
+    // A left-turn pocket: the double yellow moves left round the turn lane, a white line opens on its
+    // right, arrows in both lanes, and the stop bar across every approach lane. q is metres across toward
+    // the incoming traffic's right (it drives along u when lane.z is +1).
+    if params.role > 4.5 {
+        let dir = params.lane.z;
+        let q = across * dir;
+        let open = params.pocket.z * clamp((along - params.pocket.x) / (params.pocket.y - params.pocket.x), 0.0, 1.0);
+        let lane_w = params.lane.y;
+        // The double yellow, on the turn lane's left.
+        ypaint = max(ypaint, max(stroke(q + open - lw, lw * 0.5, aa), stroke(q + open + lw, lw * 0.5, aa)));
+        // The white line between the turn lane and the through lane: solid over the last 30 m, dashed before.
+        let near_line = abs(along - params.lane_line.x) < 30.0;
+        let lane_line = stroke(q - open, lw * 0.5, aa) * select(dashed(along, params.dash * 0.5, params.period * 0.5, aa), 1.0, near_line);
+        paint = max(paint, lane_line * smoothstep(0.3, 0.6, open));
+        // Edge lines, both sides.
+        paint = max(paint, stroke(abs(q) - (open + lane_w), params.edge_width * 0.5, aa));
+        // Arrows: left in the turn lane, ahead in the through lane (x forward, y to the traffic's left).
+        if params.arrows.x > 0.0 && open > params.pocket.z * 0.9 {
+            for (var n = 0; n < 2; n = n + 1) {
+                let tail = select(params.arrows.y, params.arrows.x, n == 0);
+                let fwd = (along - tail) * dir;
+                paint = max(paint, arrow(vec2<f32>(fwd, -q), 2.0, aa));
+                paint = max(paint, arrow(vec2<f32>(fwd, -(q - open - lane_w * 0.5)), 1.0, aa));
+            }
+        }
+        // The stop bar (or yield teeth) across the turn lane and the through lane.
+        if params.lane_line.y > 0.5 {
+            paint = max(paint, way_in((params.lane_line.x - along) * dir, q, -open + lw * 1.5, open + lane_w + params.edge_width, params.lane_line.y, aa));
         }
     }
 

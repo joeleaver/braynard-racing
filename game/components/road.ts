@@ -824,7 +824,9 @@ function armsOf(junction, object) {
     if (!arm) continue;
     const turn = pick(a.turn, TURNS);
     const w = profileOf(arm.profile).deck;     // one lane, as wide as the profile's half-deck
-    if (turn === "left" || turn === "both") arm.wBack = (arm.wBack || 0) + w;
+    // A left-turn lane opens in the middle of the road (US style, Joe 2026-11-22): the road widens by half
+    // a lane each side. A right-turn lane is added on the right edge.
+    if (turn === "left" || turn === "both") { arm.wBack = (arm.wBack || 0) + w / 2; arm.wFront = (arm.wFront || 0) + w / 2; }
     if (turn === "right" || turn === "both") arm.wFront = (arm.wFront || 0) + w;
   }
   return arms;
@@ -1606,8 +1608,10 @@ function buildApproach(approach, object) {
   for (const st of stations) st[0] = Math.max(0, Math.min(m.total, st[0]));
   // Incoming traffic drives forward along the road on an "in" arm, backward on an "out" arm; its left
   // is the road's left (−across) on "in", the road's right on "out".
+  // Braynard drives on the right (Joe, 2026-11-22). A right-turn lane is built on the traffic's right edge,
+  // outside the road; a left-turn lane opens in the road's middle (the pocket, below).
   const sides = [];
-  if (turn === "left" || turn === "both") sides.push(dir === "in" ? "left" : "right");
+  const pocket = turn === "left" || turn === "both";
   if (turn === "right" || turn === "both") sides.push(dir === "in" ? "right" : "left");
   const ground = object.refs && object.refs.ground ? object.refs.ground.id : null;
   const blend = road.components.road && road.components.road.blend != null ? road.components.road.blend : 1.5;
@@ -1618,18 +1622,20 @@ function buildApproach(approach, object) {
   const code = RULE_CODES[ruleFor(j, road.id)] || 0;
   const marks0 = (MARKS[profileName(road.components.road ? road.components.road.profile : "two-lane")] || MARKS["two-lane"])[0];
   const barFrom = Math.min(marks0[0] + marks0[2], e);
-  return sides.map((side) => {
+  // With a pocket the road is half a lane wider each side, so a right-turn lane starts that much further out.
+  const shift = pocket ? w / 2 : 0;
+  const out = sides.map((side) => {
     const mirror = side === "left";
     // The way it turns, to the traffic: on an "in" arm the road's left is the traffic's left.
     const turnsLeft = dir === "in" ? mirror : !mirror;
     const r3 = (x) => Math.round(x * 1000) / 1000;
     const marks = {
       role: 4,
-      lane: [r3((mirror ? -1 : 1) * (e + w / 2)), r3(w / 2), dirSign, turnsLeft ? 2 : 3],
+      lane: [r3((mirror ? -1 : 1) * (e + shift + w / 2)), r3(w / 2), dirSign, turnsLeft ? 2 : 3],
       arrows: [r3(uLine - dirSign * 12), r3(uLine - dirSign * 24), 0, 0],
       // The bar across it carries on from the deck's (which ends at the edge line's outer edge) to the
       // lane's far edge, so it spans every approach lane with no gap.
-      lane_line: [r3(uLine), code, r3(barFrom), r3(e + w - 0.2)],
+      lane_line: [r3(uLine), code, r3(barFrom + shift), r3(e + shift + w - 0.2)],
     };
     const points = [];
     for (let k = 0; k + 1 < stations.length; k++) {
@@ -1637,16 +1643,16 @@ function buildApproach(approach, object) {
       if (d1 - d0 < 0.01) continue;
       const pts = piece(m, d0, d1);
       if (points.length) { points[points.length - 1].handle_out = pts[0].handle_out; pts.shift(); }
-      else pts[0].section = taperSection(p, e, w0, mirror, nat).outline;
-      pts[pts.length - 1].section = taperSection(p, e, w1, mirror, nat).outline;
+      else pts[0].section = taperSection(p, e + shift, w0, mirror, nat).outline;
+      pts[pts.length - 1].section = taperSection(p, e + shift, w1, mirror, nat).outline;
       for (let i = 0; i + 1 < pts.length; i++) {
         if (pts[i].section) continue;
         const f = (nearestAlong(m, pts[i].position, d0, d1) - d0) / (d1 - d0);
-        pts[i].section = taperSection(p, e, w0 + (w1 - w0) * f, mirror, nat).outline;
+        pts[i].section = taperSection(p, e + shift, w0 + (w1 - w0) * f, mirror, nat).outline;
       }
       for (const q of pts) points.push(q);
     }
-    const { outline, roles } = taperSection(p, e, w, mirror, nat);
+    const { outline, roles } = taperSection(p, e + shift, w, mirror, nat);
     const faces = {};
     roles.forEach((role, i) => {
       if (role === "grass") faces["band " + (i + 1)] = GRASS;
@@ -1659,4 +1665,59 @@ function buildApproach(approach, object) {
     if (ground) shape[JOINS] = ground;
     return { name: "turn lane " + side, components: { world_shape: shape, curve: { closed: false, points }, material: { asset: p.material }, material_values: marks } };
   });
+  if (pocket) {
+    // The left-turn pocket: the whole road laid again over the approach, a centimetre up, widening by half
+    // a lane each side over the taper and full to the mouth, with its own markings (role 5): the double
+    // yellow moves left round the turn lane, a white line opens on its right, arrows, and the stop bar
+    // across every approach lane. Level over the last EASE metres, as the road is.
+    const r3 = (x) => Math.round(x * 1000) / 1000;
+    const half = w / 2;
+    const st = dir === "in"
+      ? [[dm - len - tap, 0, false], [dm - len, half, false], [dm - EASE, half, false], [dm + OVERLAP, half, true]]
+      : [[dm - OVERLAP, half, true], [dm + EASE, half, false], [dm + len, half, false], [dm + len + tap, 0, false]];
+    for (const q of st) q[0] = Math.max(0, Math.min(m.total, q[0]));
+    const secOf = (ex, level) => {
+      const wide = Object.assign({}, p, { deck: p.deck + ex });
+      const sec = nat ? naturalSection(wide, level) : section(wide, false);
+      return { outline: sec.outline.map(([a, b]) => [a, Math.round((b + 0.01) * 1000) / 1000]), faces: sec.faces };
+    };
+    const points = [];
+    for (let k = 0; k + 1 < st.length; k++) {
+      const [d0, x0, l0] = st[k], [d1, x1, l1] = st[k + 1];
+      if (d1 - d0 < 0.01) continue;
+      const pts = piece(m, d0, d1);
+      if (points.length) { points[points.length - 1].handle_out = pts[0].handle_out; pts.shift(); }
+      else pts[0].section = secOf(x0, l0 && EASE_LOFT).outline;
+      pts[pts.length - 1].section = secOf(x1, l1 && EASE_LOFT).outline;
+      for (let i = 0; i + 1 < pts.length; i++) {
+        if (pts[i].section) continue;
+        const f = (nearestAlong(m, pts[i].position, d0, d1) - d0) / (d1 - d0);
+        pts[i].section = secOf(x0 + (x1 - x0) * f, false).outline;
+      }
+      for (const q of pts) points.push(q);
+    }
+    if (points.length >= 2) {
+      const { outline, faces } = secOf(half, false);
+      delete faces.start; delete faces.end;           // its ends sit on the road and in the pad: tarmac
+      const shape = { shape: "Sweep", outline, follow: "Upright", rings: "Square", interval: 1, faces, blend };
+      if (ground) shape[JOINS] = ground;
+      const u0 = st[0][0];
+      const laneW = marks0[0];
+      out.push({
+        name: "turn pocket",
+        components: {
+          world_shape: shape, curve: { closed: false, points }, material: { asset: p.material },
+          material_values: {
+            role: 5,
+            // [u where it is thin, u where it is full, half a lane, 0]: half a lane wider each side from full on.
+            pocket: dir === "in" ? [0, r3(st[1][0] - u0), r3(half), 0] : [r3(st[3][0] - u0), r3(st[2][0] - u0), r3(half), 0],
+            lane: [0, r3(laneW), dirSign, 2],
+            arrows: [r3(uLine - dirSign * 12), r3(uLine - dirSign * 24), 0, 0],
+            lane_line: [r3(uLine), code, 0, 0],
+          },
+        },
+      });
+    }
+  }
+  return out;
 }

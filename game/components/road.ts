@@ -598,7 +598,9 @@ pw.defineComponent("road", {
       if (!isBridge && atMouth(d1)) delete faces["end"];
       const shape = { shape: "Sweep", outline, follow: "Upright", rings: "Square", interval: road.interval, faces, blend: isBridge ? 0 : road.blend };
       const lines = isBridge ? null : linesOn(mouths, d0, d1);
-      if (ground && !isBridge) shape[JOINS] = ground;
+      // A bridge's span joins the ground's group too (hard, at blend 0): built in a group of its own its deck
+      // met the blended road's at a sub-centimetre seam that read as a ragged crest at kart height (Playweft).
+      if (ground) shape[JOINS] = ground;
       const a = points[0].position, b = points[points.length - 1].position;
       out.push({
         name: name(k),
@@ -1194,7 +1196,9 @@ function buildJunction(junction, object) {
     const left = [-arm.u[2], 0, arm.u[0]];
     const mid = add(arm.p, scaled(arm.u, STOP_OUT));
     const sy = y + plane.b * mid[0] + plane.c * mid[2];
-    const l = add(mid, scaled(left, arm.half)), r = add(mid, scaled(left, -arm.half));
+    // Braynard drives on the right (Joe, 2026-11-22): traffic comes in against u, on its own right, which is
+    // -left. `l` is the stop line's incoming edge, `r` its other end.
+    const l = add(mid, scaled(left, -arm.half)), r = add(mid, scaled(left, arm.half));
     const rd = (v) => Math.round(v * 1000) / 1000;
     children.push({
       name: "arm " + (i + 1),
@@ -1208,21 +1212,21 @@ function buildJunction(junction, object) {
           stop_l_x: rd(l[0]), stop_l_y: rd(sy), stop_l_z: rd(l[2]), stop_r_x: rd(r[0]), stop_r_y: rd(sy), stop_r_z: rd(r[2]),
         },
         // The stop line across the way in, from the road's middle to its incoming edge (Braynard drives on
-        // the left), as a curve: game code reads a curve in the world, so rivals find the line wherever the
+        // the right), as a curve: game code reads a curve in the world, so rivals find the line wherever the
         // junction stands.
         curve: { closed: false, points: [{ position: [0, 0, 0], handle_in: [0, 0, 0], handle_out: [0, 0, 0] }, { position: [rd(l[0] - mid[0]), 0, rd(l[2] - mid[2])], handle_in: [0, 0, 0], handle_out: [0, 0, 0] }] },
       },
     });
   });
   if (controlOf(junction) === "lights") {
-    // A grey-box signal head at each arm's stop line, on the incoming traffic's left (Braynard drives on
-    // the left; traffic comes in against the arm's heading u, and its left is then +[-u.z, 0, u.x], the
-    // arm's front edge): a pole, a head and three lamps facing the traffic. The art comes later through
-    // hifipushie, by these names.
+    // A grey-box signal head for each arm on the far side of the junction, US style (Joe, 2026-11-22: drive
+    // on the right): straight across from the arm's mouth, on its traffic's right (traffic comes in
+    // against the arm's heading u; its right is -[-u.z, 0, u.x]), a pole, a head and three lamps facing
+    // the traffic. The art comes later through hifipushie, by these names.
     arms.forEach((arm, i) => {
       const left = [-arm.u[2], 0, arm.u[0]];
-      const d = STOP_OUT + 0.5;
-      const base = add(add(arm.p, scaled(arm.u, d)), scaled(left, arm.half + (arm.wFront || 0) + 1.0));
+      const across = Math.hypot(arm.p[0], arm.p[2]) + 2.0;
+      const base = add(scaled(arm.u, -across), scaled(left, -(arm.half + 1.5)));
       const by = y + plane.b * base[0] + plane.c * base[2];
       const rd = (v) => Math.round(v * 1000) / 1000;
       const yaw = Math.round(-Math.atan2(arm.u[2], arm.u[0]) * 1800 / Math.PI) / 10;
@@ -1450,12 +1454,16 @@ function buildSlip(slip, object) {
   const e = mp.deck + mp.kerb, width = 2 * rp.deck;
   // Off-ramp: thin end at `at`, widening to full over the taper, then full to the mouth.
   // On-ramp: the mouth at `at`, full along the parallel, then narrowing to nothing.
+  // Braynard drives on the right (Joe, 2026-11-22): on the main road's right its traffic runs along the
+  // curve, on its left against it, so a slip on the left is laid back along the curve from `at`.
   const t = Math.max(1, slip.taper), par = Math.max(0, slip.parallel);
-  const from = Math.max(0, Math.min(m.total, slip.at)), to = Math.min(m.total, from + t + par);
+  const travel = pick(slip.side, SIDES) === "left" ? -1 : 1;
+  const at = Math.max(0, Math.min(m.total, slip.at));
+  const from = travel > 0 ? at : Math.max(0, at - t - par), to = travel > 0 ? Math.min(m.total, at + t + par) : at;
   if (to - from < 1) return [];
-  const stations = kind === "off-ramp"
-    ? [[from, THIN], [from + t, width], [to, width]]
-    : [[from, width], [from + par, width], [to, THIN]];
+  const stations = travel > 0
+    ? (kind === "off-ramp" ? [[from, THIN], [from + t, width], [to, width]] : [[from, width], [from + par, width], [to, THIN]])
+    : (kind === "off-ramp" ? [[from, width], [to - t, width], [to, THIN]] : [[from, THIN], [to - par, width], [to, width]]);
   const mirror = side === "left";
   // The taper's curve: the main road's curve cut at each station, so every station is a curve point
   // carrying its own section.
@@ -1491,7 +1499,7 @@ function buildSlip(slip, object) {
   const shape = { shape: "Sweep", outline, follow: "Upright", rings: "Square", interval, faces, blend };
   if (ground) shape[JOINS] = ground;
   // The ramp mouth: the middle of the full-width lane where the ramp road meets it.
-  const mouthAt = kind === "off-ramp" ? to : from;
+  const mouthAt = (kind === "off-ramp") === (travel > 0) ? to : from;
   const sgn = mirror ? -1 : 1;
   const path = pw.curve.path(curve);
   // On a crowned (natural) main road the lane is lower out at its edge by the crossfall: the ramp meets
@@ -1608,6 +1616,8 @@ function buildApproach(approach, object) {
   const dirSign = dir === "in" ? 1 : -1;
   const uLine = dir === "in" ? dm - STOP_OUT - stations[0][0] : dm + STOP_OUT - stations[0][0];
   const code = RULE_CODES[ruleFor(j, road.id)] || 0;
+  const marks0 = (MARKS[profileName(road.components.road ? road.components.road.profile : "two-lane")] || MARKS["two-lane"])[0];
+  const barFrom = Math.min(marks0[0] + marks0[2], e);
   return sides.map((side) => {
     const mirror = side === "left";
     // The way it turns, to the traffic: on an "in" arm the road's left is the traffic's left.
@@ -1617,7 +1627,9 @@ function buildApproach(approach, object) {
       role: 4,
       lane: [r3((mirror ? -1 : 1) * (e + w / 2)), r3(w / 2), dirSign, turnsLeft ? 2 : 3],
       arrows: [r3(uLine - dirSign * 12), r3(uLine - dirSign * 24), 0, 0],
-      lane_line: [r3(uLine), code, 0, 0],
+      // The bar across it carries on from the deck's (which ends at the edge line's outer edge) to the
+      // lane's far edge, so it spans every approach lane with no gap.
+      lane_line: [r3(uLine), code, r3(barFrom), r3(e + w - 0.2)],
     };
     const points = [];
     for (let k = 0; k + 1 < stations.length; k++) {
@@ -1641,6 +1653,8 @@ function buildApproach(approach, object) {
       else if (role === "kerb") faces["band " + (i + 1)] = KERB;
     });
     faces["start"] = faces["end"] = GRASS;
+    // The end at the mouth is inside the pad: tarmac, so no grass shows where the blend rounds the joint.
+    delete faces[dir === "in" ? "end" : "start"];
     const shape = { shape: "Sweep", outline, follow: "Upright", rings: "Square", interval: 1, faces, blend };
     if (ground) shape[JOINS] = ground;
     return { name: "turn lane " + side, components: { world_shape: shape, curve: { closed: false, points }, material: { asset: p.material }, material_values: marks } };

@@ -140,12 +140,13 @@ function lineAhead(at, forward, speed, brakeRate) {
   let best = null;
   for (const s of stopLines) {
     if (s.rule === "priority" || s.rule === "") continue;
-    // The line runs from the road's middle to its incoming edge; the arm runs out of the junction along u.
+    // The line runs from the road's middle to its incoming edge, on the right of traffic coming in (Braynard
+    // drives on the right); the arm runs out of the junction along u, a quarter turn from it.
     const e = [s.edge[0] - s.middle[0], s.edge[2] - s.middle[2]];
     const half = Math.hypot(e[0], e[1]);
     if (half < 0.1) continue;
     const across = [e[0] / half, e[1] / half];
-    const u = [across[1], -across[0]];
+    const u = [-across[1], across[0]];
     // Coming in: heading against u.
     if (forward[0] * u[0] + forward[2] * u[1] > -0.5) continue;
     const p = [at[0] - s.middle[0], at[2] - s.middle[2]];

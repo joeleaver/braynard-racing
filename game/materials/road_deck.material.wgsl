@@ -11,6 +11,9 @@ material 3d;
 //   edge, hatched or plain. With a median, it has a solid line each side and is hatched between.
 param base: color = (0.20, 0.20, 0.21, 1.0);
 param line: color = (0.92, 0.92, 0.88, 1.0);
+// US markings (Joe, 2026-11-22): centre lines and the left edge of a one-way road are yellow.
+param yellow: color = (0.93, 0.72, 0.12, 1.0);
+param one_way: f32 = 0.0 range(0, 1);           // 1: a one-way road (a ramp) driven along its curve
 param half_width: f32 = 4.0 range(0.5, 40);    // metres from the middle to the deck's edge
 param median: f32 = 0.0 range(0, 10);          // half the central reservation; 0 for a centre line
 param lanes: f32 = 1.0 range(1, 6);            // lanes each way
@@ -26,10 +29,11 @@ param grain: f32 = 0.35 range(0, 1);
 param rough: f32 = 0.88 range(0, 1);
 // Where a span meets a junction, its own values (components/road.ts writes them on that span, Playweft
 // material values) draw the line across the way in. `_a` is the span's start end, `_b` its end end:
-// stop: how far along the span (u) the line is, 0 for none; rule: 1 give way (a double dashed line),
-// 2 stop (one solid line 0.45 m wide), 3 lights (one solid line 0.2 m wide); warn: over this many metres before the line
-// the centre line turns to long warning dashes. Braynard drives on the left, so the line crosses the half
-// the traffic comes in on: at the start end that's the +across side, at the end end the -across side.
+// stop: how far along the span (u) the line is, 0 for none; rule: 1 yield (shark's teeth), 2 stop and
+// 3 lights (a solid white stop bar 0.45 m wide); warn: over this many metres before the line the centre
+// line is a double solid yellow. US markings, and Braynard drives on the right (Joe, 2026-11-22), so the
+// line crosses the half the traffic comes in on: at the start end that's the -across side, at the end
+// end the +across side.
 param stop_a: f32 = 0.0 range(0, 10000);
 param rule_a: f32 = 0.0 range(0, 3);
 param warn_a: f32 = 0.0 range(0, 100);
@@ -96,17 +100,23 @@ fn dashed(along: f32, on: f32, period: f32, aa: f32) -> f32 {
     return smoothstep(-aa, aa, t) * (1.0 - smoothstep(on - aa, on + aa, t));
 }
 
-// The line across the way in: `d` metres from where it stands, onto the road; `side` metres across into
-// the incoming half; `out` where that half ends.
-fn way_in(d: f32, side: f32, out: f32, rule: f32, aa: f32) -> f32 {
-    if rule < 0.5 || side < 0.0 || side > out { return 0.0; }
-    if rule < 1.5 {
-        // Give way: two dashed lines, 0.6 m dashes across the lane.
-        let dashes = dashed(side, 0.6, 0.9, aa);
-        return max(stroke(d - 0.15, 0.1, aa), stroke(d - 0.55, 0.1, aa)) * dashes;
-    }
-    if rule < 2.5 { return stroke(d - 0.225, 0.225, aa); }    // stop: 0.45 m, to read apart from lights
-    return stroke(d - 0.1, 0.1, aa);                            // lights
+// The line across the way in, `d` metres from where it stands toward the traffic coming in, across
+// `side` from `lo` to `hi`: every approach lane, from the centre line's edge to the edge line's. (Not
+// `from`/`to`: `from` is reserved in WGSL, and a material that fails to compile shows nothing.)
+fn way_in(d: f32, side: f32, lo: f32, hi: f32, rule: f32, aa: f32) -> f32 {
+    if rule < 0.5 || side < lo - aa || side > hi + aa { return 0.0; }
+    let within = smoothstep(lo - aa, lo + aa, side) * (1.0 - smoothstep(hi - aa, hi + aa, side));
+    if rule < 1.5 { return shark_teeth(d, side - lo, aa) * within; }   // yield
+    return stroke(d - 0.225, 0.225, aa) * within;                        // stop, or a signal's stop bar: 0.45 m
+}
+
+// A US yield line: white triangles 0.6 m wide and 0.9 m long, 0.3 m apart, each pointing back at the
+// driver coming in (d metres from the line toward them).
+fn shark_teeth(d: f32, side: f32, aa: f32) -> f32 {
+    if d < -aa || d > 0.9 + aa { return 0.0; }
+    let x = fract(side / 0.9) * 0.9 - 0.3;
+    let half = 0.3 * (1.0 - clamp(d, 0.0, 0.9) / 0.9);
+    return (1.0 - smoothstep(half - aa, half + aa, abs(x))) * smoothstep(-aa, aa, d);
 }
 
 fn mouth_of(k: i32) -> vec4<f32> {
@@ -122,10 +132,11 @@ fn mouth_of(k: i32) -> vec4<f32> {
 
 // The priority road carried across a pad, from mouth i to mouth j as a curve leaving each mouth along its
 // arm: the paint of its centre line and edge lines at `p`, the edges broken where a side road joins.
-fn through(p: vec2<f32>, pair: vec4<f32>, aa: f32) -> f32 {
+// White (x) and yellow (y) paint: the centre line is yellow, the edges white.
+fn through(p: vec2<f32>, pair: vec4<f32>, aa: f32) -> vec2<f32> {
     let i = i32(pair.x + 0.5);
     let j = i32(pair.y + 0.5);
-    if i < 1 || j < 1 { return 0.0; }
+    if i < 1 || j < 1 { return vec2<f32>(0.0, 0.0); }
     let mi = mouth_of(i);
     let mj = mouth_of(j);
     let ui = vec2<f32>(cos(mi.z), sin(mi.z));
@@ -159,11 +170,12 @@ fn through(p: vec2<f32>, pair: vec4<f32>, aa: f32) -> f32 {
         prev = q;
     }
     var paint = 0.0;
+    var centre = 0.0;
     let lines = params.through_w;
     if lines.w >= 1.5 {
-        paint = stroke(side, lines.y * 0.5, aa);
+        centre = max(stroke(side - lines.y, lines.y * 0.5, aa), stroke(side + lines.y, lines.y * 0.5, aa));
     } else if lines.w >= 0.5 {
-        paint = stroke(side, lines.y * 0.5, aa) * dashed(along, params.through_d.x, params.through_d.y, aa);
+        centre = stroke(side, lines.y * 0.5, aa) * dashed(along, params.through_d.x, params.through_d.y, aa);
     }
     if lines.z > 0.0 {
         var edge = stroke(abs(side) - lines.x, lines.z * 0.5, aa);
@@ -181,11 +193,11 @@ fn through(p: vec2<f32>, pair: vec4<f32>, aa: f32) -> f32 {
         }
         paint = max(paint, edge);
     }
-    return paint;
+    return vec2<f32>(paint, centre);
 }
 
-// A roundabout's markings: a dashed give-way line round the ring's outer edge across each way in (the
-// half the traffic comes in on).
+// A roundabout's markings: a yield line (shark's teeth) round the ring's outer edge across each way in (the
+// half the traffic comes in on, its right).
 fn roundabout(p: vec2<f32>, aa: f32) -> f32 {
     let outer = params.ring.y;
     if outer <= 0.0 { return 0.0; }
@@ -196,10 +208,11 @@ fn roundabout(p: vec2<f32>, aa: f32) -> f32 {
         let mk = mouth_of(k);
         let uk = vec2<f32>(cos(mk.z), sin(mk.z));
         let lk = vec2<f32>(-uk.y, uk.x);
-        let s = dot(p, lk);
+        // Coming in on the right (Braynard drives on the right): traffic comes in against uk, and its right
+        // is the -lk half.
+        let s = -dot(p, lk);
         if dot(p, uk) > 0.0 && s > 0.0 && s < mk.w + 1.0 {
-            let lines = max(stroke(r - outer - 0.15, 0.1, aa), stroke(r - outer - 0.55, 0.1, aa));
-            paint = max(paint, lines * dashed(s, 0.6, 0.9, aa));
+            paint = max(paint, shark_teeth(r - outer, s, aa) * (1.0 - smoothstep(mk.w + 1.0 - aa, mk.w + 1.0 + aa, s)));
         }
     }
     return paint;
@@ -295,11 +308,11 @@ fn surface(s: SurfaceIn) -> Surface {
         // The edges gather dirt, over the last 0.6 m of the deck.
         grime = max(grime, smoothstep(params.half_width - 0.6, params.half_width, side) * (1.0 - smoothstep(params.half_width, params.half_width + 0.3, side)) * 0.8);
         // Braking: darker over the last 20 m before a line, strongest at it, in the half that stops there.
-        if params.stop_a > 0.0 && params.rule_a > 0.5 && across > 0.0 && across < lanes_w {
+        if params.stop_a > 0.0 && params.rule_a > 0.5 && across < 0.0 && -across < lanes_w {
             let d = along - params.stop_a;
             grime = max(grime, (1.0 - smoothstep(0.0, 20.0, d)) * step(0.0, d) * 0.7);
         }
-        if params.stop_b > 0.0 && params.rule_b > 0.5 && across < 0.0 && -across < lanes_w {
+        if params.stop_b > 0.0 && params.rule_b > 0.5 && across > 0.0 && across < lanes_w {
             let d = params.stop_b - along;
             grime = max(grime, (1.0 - smoothstep(0.0, 20.0, d)) * step(0.0, d) * 0.7);
         }
@@ -324,28 +337,29 @@ fn surface(s: SurfaceIn) -> Surface {
     let crack_field = vnoise(s.world.xz * 0.9) + 0.5 * vnoise(s.world.xz * 2.3);
     let crack = (1.0 - smoothstep(0.0, 0.012, abs(crack_field - 0.75))) * smoothstep(0.68, 0.78, vnoise(s.world.xz * 0.11 + 7.0));
     let wear_k = params.wear;
-    col *= 1.0 - polish * 0.12 * wear_k;
+    col *= 1.0 - polish * 0.06 * wear_k;
     col *= 1.0 - grime * 0.25 * wear_k;
     col = mix(col, params.base.rgb * 0.8, patched * 0.5 * wear_k);
     col *= 1.0 - crack * 0.3 * wear_k;
 
-    var paint = 0.0;
+    var paint = 0.0;           // white
+    var ypaint = 0.0;          // yellow
     let lanes_out = params.median + params.lanes * params.lane_width;   // where the lanes end
-    // Near a junction's line the centre line turns to long warning dashes.
+    // Near a junction's line the centre line turns to a double solid yellow: no passing on the approach.
     let warning = (params.warn_a > 0.0 && along < params.stop_a + params.warn_a)
         || (params.warn_b > 0.0 && params.stop_b > 0.0 && along > params.stop_b - params.warn_b);
+    let lw = params.line_width;
     if params.median <= 0.0 {
-        if params.centre >= 1.5 {
-            paint = max(paint, stroke(across, params.line_width * 0.5, aa));
-        } else if warning {
-            paint = max(paint, stroke(across, params.line_width * 0.5, aa) * dashed(along, params.period * 0.75, params.period, aa));
+        if params.centre >= 1.5 || (warning && params.centre >= 0.5) {
+            ypaint = max(ypaint, max(stroke(across - lw, lw * 0.5, aa), stroke(across + lw, lw * 0.5, aa)));
         } else if params.centre >= 0.5 {
-            paint = max(paint, stroke(across, params.line_width * 0.5, aa) * dashed(along, params.dash, params.period, aa));
+            ypaint = max(ypaint, stroke(across, lw * 0.5, aa) * dashed(along, params.dash, params.period, aa));
         }
     } else {
-        paint = max(paint, stroke(side - params.median, params.edge_width * 0.5, aa));
+        // A divided road: each carriageway's left edge, by the median, is yellow, and so is its hatching.
+        ypaint = max(ypaint, stroke(side - params.median, params.edge_width * 0.5, aa));
         if params.hatch > 0.0 && side < params.median {
-            paint = max(paint, hatched(along, side, params.hatch, aa));
+            ypaint = max(ypaint, hatched(along, side, params.hatch, aa));
         }
     }
     // Lane lines between the lanes each way.
@@ -355,7 +369,10 @@ fn surface(s: SurfaceIn) -> Surface {
     }
     // The edge line where the lanes end, and the hard shoulder beyond it.
     if params.edge_width > 0.0 && lanes_out < params.half_width {
-        paint = max(paint, stroke(side - lanes_out, params.edge_width * 0.5, aa));
+        let edge_line = stroke(side - lanes_out, params.edge_width * 0.5, aa);
+        // A one-way road's left edge (driving along u, its left is -across) is yellow.
+        if params.one_way > 0.5 && across < 0.0 { ypaint = max(ypaint, edge_line); }
+        else { paint = max(paint, edge_line); }
         if params.hatch > 0.0 && side > lanes_out + params.edge_width && side < params.half_width - 0.2 {
             paint = max(paint, hatched(along, side, params.hatch, aa));
         }
@@ -363,18 +380,22 @@ fn surface(s: SurfaceIn) -> Surface {
 
     // A junction's pad: the priority road carried through; a roundabout's: its give-way lines.
     if params.role > 0.5 {
-        let p = s.uv;
+        // In the junction builder's own x and z (the mouths' terms): a top face's v runs against z.
+        let p = vec2<f32>(s.uv.x, -s.uv.y);
         if params.role < 1.5 {
-            paint = max(paint, through(p, params.through_1, aa));
-            paint = max(paint, through(p, params.through_2, aa));
+            let t1 = through(p, params.through_1, aa);
+            let t2 = through(p, params.through_2, aa);
+            paint = max(paint, max(t1.x, t2.x));
+            ypaint = max(ypaint, max(t1.y, t2.y));
         } else {
             paint = max(paint, roundabout(p, aa));
         }
     }
 
     // A roundabout arm's splitter-island points.
-    paint = max(paint, nose(along, across, params.nose_a, aa));
-    paint = max(paint, nose(along, across, params.nose_b, aa));
+    // (Yellow: it parts opposing traffic.)
+    ypaint = max(ypaint, nose(along, across, params.nose_a, aa));
+    ypaint = max(ypaint, nose(along, across, params.nose_b, aa));
 
     // A slip road's taper: its outer edge line where it is wide enough, chevrons where it is narrow.
     if params.role > 2.5 && params.role < 3.5 {
@@ -389,7 +410,7 @@ fn surface(s: SurfaceIn) -> Surface {
         if w > 1.5 {
             paint = max(paint, stroke(into - (w - 0.45), 0.075, aa));
         }
-        if w < 3.0 && into > 0.0 && into < w - 0.3 {
+        if w < 1.8 && into > 0.0 && into < w - 0.3 {
             paint = max(paint, chevrons(along, into - w * 0.5, 2.0, aa));
         }
     }
@@ -402,25 +423,31 @@ fn surface(s: SurfaceIn) -> Surface {
             paint = max(paint, arrow(vec2<f32>((along - params.arrows.x) * dir, lat), params.lane.w, aa));
             paint = max(paint, arrow(vec2<f32>((along - params.arrows.y) * dir, lat), params.lane.w, aa));
         }
+        // Its line runs on from the deck's, from lane_line.z to lane_line.w across the road.
         if params.lane_line.y > 0.5 {
-            paint = max(paint, way_in((params.lane_line.x - along) * dir, abs(across - params.lane.x), params.lane.y, params.lane_line.y, aa));
+            paint = max(paint, way_in((params.lane_line.x - along) * dir, abs(across), params.lane_line.z, params.lane_line.w, params.lane_line.y, aa));
         }
     }
 
-    // The lines across the way in at the span's ends.
-    let lanes_in = min(lanes_out, params.half_width);
+    // The lines across the way in at the span's ends: from the yellow centre line's outer edge (the whole
+    // width on a one-way road) to the edge line's outer edge, with no gap at either.
+    let bar_to = min(lanes_out + params.edge_width, params.half_width);
+    var bar_from = 0.0;
+    if params.one_way > 0.5 || params.median > 0.0 { bar_from = select(params.median, -bar_to, params.one_way > 0.5); }
+    else if params.centre >= 0.5 { bar_from = lw * 1.5; }       // past a double yellow (it is always double at a line)
     if params.stop_a > 0.0 {
-        paint = max(paint, way_in(along - params.stop_a, across, lanes_in, params.rule_a, aa));
+        paint = max(paint, way_in(along - params.stop_a, -across, bar_from, bar_to, params.rule_a, aa));
     }
     if params.stop_b > 0.0 {
-        paint = max(paint, way_in(params.stop_b - along, -across, lanes_in, params.rule_b, aa));
+        paint = max(paint, way_in(params.stop_b - along, across, bar_from, bar_to, params.rule_b, aa));
     }
 
     let worn = 0.75 + 0.25 * smoothstep(0.2, 0.5, vnoise(s.world.xz * 2.5));
     col = mix(col, params.line.rgb, paint * worn * 0.92);
+    col = mix(col, params.yellow.rgb, ypaint * worn * 0.92);
 
     out.base_color = vec4<f32>(col, 1.0);
-    out.roughness = mix(params.rough - polish * 0.18 * params.wear, 0.6, paint);
+    out.roughness = mix(params.rough - polish * 0.18 * params.wear, 0.6, max(paint, ypaint));
     out.metallic = 0.0;
     return out;
 }

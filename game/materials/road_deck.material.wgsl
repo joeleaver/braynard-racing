@@ -69,6 +69,8 @@ param taper_w2: vec4f = (0.0, 0.0, 0.0, 0.0);
 param lane: vec4f = (0.0, 0.0, 1.0, 1.0);
 param arrows: vec4f = (0.0, 0.0, 0.0, 0.0);
 param lane_line: vec4f = (0.0, 0.0, 0.0, 0.0);
+// Wear: how strongly the wheel tracks, braking grime, dirty edges and patches show (0 none, 1 full).
+param wear: f32 = 1.0 range(0, 2);
 
 fn hash2(p: vec2<f32>) -> f32 {
     let q = fract(p * vec2<f32>(0.1031, 0.1030));
@@ -275,6 +277,58 @@ fn surface(s: SurfaceIn) -> Surface {
     var col = params.base.rgb * (0.9 + blotch * 0.2);
     col *= 1.0 + (vnoise(s.world.xz * 11.0) - 0.5) * params.grain * 0.5;
 
+    // Wear, so the road looks driven on. On a deck it follows the lanes; on a pad it is patchier.
+    var polish = 0.0;          // smoother, darker: the wheel tracks
+    var grime = 0.0;           // darker: braking, the edges
+    let lanes_w = params.median + params.lanes * params.lane_width;
+    // A slip's taper and a turn lane lie in their road's own u and across, so they wear as its deck does.
+    let deck_like = params.role < 0.5 || params.role > 2.5;
+    if deck_like {
+        // Two wheel tracks in each lane, a little wandering.
+        let wander = (vnoise(vec2<f32>(along * 0.05, 3.0)) - 0.5) * 0.4;
+        for (var k = 0.0; k < params.lanes; k = k + 1.0) {
+            let mid = params.median + (k + 0.5) * params.lane_width + wander;
+            let t1 = 1.0 - smoothstep(0.15, 0.45, abs(side - mid + 0.75));
+            let t2 = 1.0 - smoothstep(0.15, 0.45, abs(side - mid - 0.75));
+            polish = max(polish, max(t1, t2));
+        }
+        // The edges gather dirt, over the last 0.6 m of the deck.
+        grime = max(grime, smoothstep(params.half_width - 0.6, params.half_width, side) * (1.0 - smoothstep(params.half_width, params.half_width + 0.3, side)) * 0.8);
+        // Braking: darker over the last 20 m before a line, strongest at it, in the half that stops there.
+        if params.stop_a > 0.0 && params.rule_a > 0.5 && across > 0.0 && across < lanes_w {
+            let d = along - params.stop_a;
+            grime = max(grime, (1.0 - smoothstep(0.0, 20.0, d)) * step(0.0, d) * 0.7);
+        }
+        if params.stop_b > 0.0 && params.rule_b > 0.5 && across < 0.0 && -across < lanes_w {
+            let d = params.stop_b - along;
+            grime = max(grime, (1.0 - smoothstep(0.0, 20.0, d)) * step(0.0, d) * 0.7);
+        }
+    } else if params.role < 2.5 {
+        // A pad: turning karts smear it all over, worst in the middle.
+        grime = max(grime, smoothstep(0.35, 0.8, vnoise(s.world.xz * 0.35)) * 0.5);
+    }
+    // Patches: oblongs of newer, darker tarmac here and there, laid along the road on a deck (along and
+    // across), in the world's own grid turned off square on a pad; each its own size, edges a little soft.
+    var pq = s.world.xz;
+    if deck_like { pq = vec2<f32>(along, across); }
+    else { pq = vec2<f32>(pq.x * 0.866 - pq.y * 0.5, pq.x * 0.5 + pq.y * 0.866); }
+    let cell_size = vec2<f32>(5.0, 2.5);
+    let cell = floor(pq / cell_size);
+    let pick = hash2(cell + vec2<f32>(17.0, 5.0));
+    let size = vec2<f32>(0.25 + 0.2 * hash2(cell + vec2<f32>(3.0, 9.0)), 0.2 + 0.25 * hash2(cell + vec2<f32>(8.0, 1.0)));
+    let inside = abs(fract(pq / cell_size) - 0.5);
+    let edge_soft = 0.04;
+    let patched = select(0.0, 1.0, pick > 0.96)
+        * (1.0 - smoothstep(size.x - edge_soft, size.x, inside.x)) * (1.0 - smoothstep(size.y - edge_soft, size.y, inside.y));
+    // Cracks: a few thin dark lines, only in the odd stretch.
+    let crack_field = vnoise(s.world.xz * 0.9) + 0.5 * vnoise(s.world.xz * 2.3);
+    let crack = (1.0 - smoothstep(0.0, 0.012, abs(crack_field - 0.75))) * smoothstep(0.68, 0.78, vnoise(s.world.xz * 0.11 + 7.0));
+    let wear_k = params.wear;
+    col *= 1.0 - polish * 0.12 * wear_k;
+    col *= 1.0 - grime * 0.25 * wear_k;
+    col = mix(col, params.base.rgb * 0.8, patched * 0.5 * wear_k);
+    col *= 1.0 - crack * 0.3 * wear_k;
+
     var paint = 0.0;
     let lanes_out = params.median + params.lanes * params.lane_width;   // where the lanes end
     // Near a junction's line the centre line turns to long warning dashes.
@@ -366,7 +420,7 @@ fn surface(s: SurfaceIn) -> Surface {
     col = mix(col, params.line.rgb, paint * worn * 0.92);
 
     out.base_color = vec4<f32>(col, 1.0);
-    out.roughness = mix(params.rough, 0.6, paint);
+    out.roughness = mix(params.rough - polish * 0.18 * params.wear, 0.6, paint);
     out.metallic = 0.0;
     return out;
 }

@@ -1364,8 +1364,9 @@ pw.defineComponent("road_link", {
 });
 
 const SLIP_KINDS = ["off-ramp", "on-ramp"];
-// How wide a taper's thin end is beyond the main road's edge (it starts inside the main road's deck).
-const THIN = 0.6;
+// How wide a taper's thin end is beyond the main road's edge (it starts inside the main road's deck). Small, so
+// its shoulder and bank start on the main road's and grow out of them: 0.6 left a square step there.
+const THIN = 0.05;
 const SIDES = ["right", "left"];
 
 // A curve's points carried through a matrix (twelve numbers, as object.refs gives), into the builder's space.

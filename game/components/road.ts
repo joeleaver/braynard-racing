@@ -1583,7 +1583,8 @@ function buildSlip(slip, object) {
       },
     });
   }
-  return cutKids.concat([
+  const tilt = rampTilt(object, main, mp, kind, Math.max(0, from - 200), Math.min(m.total, to + 50));
+  return cutKids.concat(tilt ? [tilt] : [], [
     {
       name: "taper",
       components: {
@@ -1608,6 +1609,102 @@ function buildSlip(slip, object) {
       },
     },
   ]);
+}
+
+// A slip's ramp road tilts over its last TILT_RUN metres before the mouth, from crowned to the main road's
+// one-way cross-slope, so its edge on the main road's side meets the main road's surface exactly: a crowned
+// ramp's edge sits below its crown, and where it ran beside the Ring it left a step and a trough (Home Farm's
+// On-ramp). The slip lays it, since it names both roads and reads the main road's own section (its profile's
+// crossfall and shoulder) from its ref: the ramp's back-reference to the slip carries the slip alone.
+// It's the ramp's deck laid again over that stretch, TILT_UP above it, its near edge raised to the main
+// road's surface (never lowered: where the ramp stands above the main road it stays as it is), its far
+// edge and its crown as the ramp's own. Nothing is laid where no raise is needed.
+const TILT_RUN = 40, TILT_UP = 0.01, TILT_MAX = 0.3, TILT_STEP = 4;
+function rampTilt(object, main, mp, kind, w0, w1) {
+  const ramp = object.refs && object.refs.ramp;
+  if (!ramp || !ramp.components.curve || !ramp.components.road) return null;
+  const rp = profileOf(ramp.components.road.profile);
+  const rnat = isNatural(ramp.components.road);
+  const rc = throughMatrix(ramp.components.curve, ramp.matrix);
+  const rm = measure(rc), rpath = pw.curve.path(rc);
+  const run = Math.min(TILT_RUN, rm.total - 1);
+  if (run < 5) return null;
+  // An on-ramp's curve ends at the mouth; an off-ramp's starts there.
+  const atEnd = kind === "on-ramp";
+  const d0 = atEnd ? rm.total - run : 0, d1 = atEnd ? rm.total : run;
+  const mpath = pw.curve.path(throughMatrix(main.components.curve, main.matrix));
+  const chain = topChain(mp, isNatural(main.components.road));
+  // The main road's top surface `x` metres from its middle, above its curve; null beyond its shoulder.
+  const surf = (x) => {
+    x = Math.abs(x);
+    for (let i = 0; i + 1 < chain.length; i++) {
+      const [a, ya] = chain[i], [b, yb] = chain[i + 1];
+      if (x >= a && x <= b) return b - a > 1e-6 ? ya + (yb - ya) * (x - a) / (b - a) : Math.max(ya, yb);
+    }
+    return null;
+  };
+  // The main road's surface height under a point (world, in the slip's space), or null. The main road is
+  // sampled once a metre over the window, and each point searches those samples (a builder has a time
+  // budget, and walking the curve for every point ran out of it).
+  const samples = [];
+  for (let d = w0; d <= w1; d += 1) {
+    const f = mpath.at(d);
+    samples.push([f.position[0], f.position[1], f.position[2], f.right[0], f.right[2]]);
+  }
+  const mainAt = (q) => {
+    let k = 0, bd = Infinity;
+    for (let i = 0; i < samples.length; i++) {
+      const e = (samples[i][0] - q[0]) ** 2 + (samples[i][2] - q[2]) ** 2;
+      if (e < bd) { bd = e; k = i; }
+    }
+    // Between the nearest sample and its better neighbour, where q's foot falls.
+    const j = k + 1 < samples.length && (k === 0 || (samples[k + 1][0] - q[0]) ** 2 + (samples[k + 1][2] - q[2]) ** 2 < (samples[k - 1][0] - q[0]) ** 2 + (samples[k - 1][2] - q[2]) ** 2) ? k + 1 : k - 1;
+    const a = samples[Math.min(k, j)], b = samples[Math.max(k, j)];
+    const ux = b[0] - a[0], uz = b[2] - a[2], ll = ux * ux + uz * uz;
+    const t = ll > 1e-9 ? Math.max(0, Math.min(1, ((q[0] - a[0]) * ux + (q[2] - a[2]) * uz) / ll)) : 0;
+    const P = [a[0] + ux * t, a[1] + (b[1] - a[1]) * t, a[2] + uz * t];
+    const across = (q[0] - P[0]) * (a[3] + (b[3] - a[3]) * t) + (q[2] - P[2]) * (a[4] + (b[4] - a[4]) * t);
+    const y = surf(across);
+    return y === null ? null : P[1] + y;
+  };
+  const hw = rp.deck + rp.kerb, cf = rnat ? rp.natural.crossfall : 0;
+  const edgeY = DECK_Y - hw * cf;
+  // A section every TILT_STEP metres: the curve cut there, as the slip's taper is.
+  const points = [];
+  for (let a = d0; a < d1 - 0.01; a += TILT_STEP) {
+    const pts = piece(rm, a, Math.min(d1, a + TILT_STEP));
+    if (points.length) { points[points.length - 1].handle_out = pts[0].handle_out; pts.shift(); }
+    for (const q of pts) points.push(q);
+  }
+  let raised = 0;
+  points.forEach((q) => {
+    const along = nearestAlong(rm, q.position, d0, d1);
+    const f = rpath.at(along);
+    const lift = (side) => {
+      const at = rpath.offset(along, side * hw, 0);
+      const y = mainAt(at);
+      return y === null ? null : y - f.position[1];
+    };
+    const left = lift(-1), right = lift(1);
+    // The side the main road is on: the edge whose surface it reaches (the higher, if both).
+    const near = left === null ? (right === null ? 0 : 1) : right === null ? -1 : (left >= right ? -1 : 1);
+    const want = near < 0 ? left : near > 0 ? right : null;
+    // No easing: where the main road's surface isn't under the edge, or is below it, the raise is nothing.
+    const up = want === null ? 0 : Math.min(TILT_MAX, Math.max(0, want - edgeY));
+    raised = Math.max(raised, up);
+    const yl = edgeY + (near < 0 ? up : 0), yr = edgeY + (near > 0 ? up : 0);
+    const mid = Math.max(DECK_Y, (yl + yr) / 2);
+    const r = (v) => Math.round(v * 1000) / 1000;
+    q.section = [[-hw, -0.3], [hw, -0.3], [hw, r(yr + TILT_UP)], [0, r(mid + TILT_UP)], [-hw, r(yl + TILT_UP)]];
+  });
+  if (raised < 0.005) return null;
+  const faces = { "band 1": GRASS, "band 2": GRASS, "band 5": GRASS };
+  const blend = ramp.components.road.blend != null ? ramp.components.road.blend : 1.5;
+  const interval = ramp.components.road.interval > 0 ? ramp.components.road.interval : 2;
+  const shape = { shape: "Sweep", outline: points[points.length - 1].section, follow: "Upright", rings: "Square", interval, faces, blend };
+  const ground = object.refs && object.refs.ground ? object.refs.ground.id : null;
+  if (ground) shape[JOINS] = ground;
+  return { name: "ramp tilt", components: { world_shape: shape, curve: { closed: false, points }, material: { asset: rp.material } } };
 }
 
 // How far along a measured curve the point nearest `q` is, between d0 and d1.

@@ -320,6 +320,54 @@ function shoulderOut(n, x0, y0, cf, depth) {
   return pts;
 }
 
+// How far before a junction's line the centre line turns to long warning dashes.
+const WARN = 30;
+const RULE_CODES = { "give way": 1, stop: 2, lights: 3 };
+
+// A road's rule where it meets a junction, as the junction's rulesOf gives it, worked out from the
+// junction alone: its control, and whether this road is one of its priority roads. A build doesn't know
+// its own object's id yet (asked of Playweft); until it does, a road at a junction that names a priority
+// road can't tell whether it is that road, and draws no line ("priority").
+function ruleFor(j, object) {
+  const jn = j.components.junction;
+  const control = controlOf(jn);
+  if (control === "lights") return "lights";
+  if (control === "all-way stop") return "stop";
+  if (control === "roundabout") return "give way";
+  const minor = control === "stop" ? "stop" : "give way";
+  const pri = [jn.priority, jn.priority_2].filter(Boolean);
+  if (!pri.length) return minor;
+  if (object.id === undefined) return "priority";
+  return pri.includes(object.id) ? "priority" : minor;
+}
+
+// The material values that draw the lines across the way in on a span from d0 to d1 (and the warning
+// dashes before them), or null. In the span's own u (metres from d0). Traffic driving toward larger d meets
+// its line at the span's end side (_b); toward smaller d, at its start side (_a).
+function linesOn(mouths, d0, d1) {
+  const v = {};
+  for (const mo of mouths) {
+    const code = RULE_CODES[mo.rule] || 0;
+    if (!code) continue;
+    if (mo.toward > 0) {
+      if (mo.at < d0 - 1 || mo.at - WARN > d1) continue;
+      v.stop_b = Math.round((mo.at - d0) * 1000) / 1000;
+      v.rule_b = code;
+      v.warn_b = WARN;
+    } else {
+      if (mo.at > d1 + 1 || mo.at + WARN < d0) continue;
+      if (mo.at >= d0) {
+        v.stop_a = Math.round((mo.at - d0) * 1000) / 1000;
+        v.rule_a = code;
+        v.warn_a = WARN;
+      } else {
+        v.warn_a = Math.round((mo.at + WARN - d0) * 1000) / 1000;
+      }
+    }
+  }
+  return Object.keys(v).length ? v : null;
+}
+
 // The whole natural cross-section: a crowned deck, edge strips, rolled shoulders and banks. `level`
 // takes the crossfall away (where the road meets a junction). Same number of points either way.
 function naturalSection(p, level, deep) {
@@ -400,11 +448,19 @@ pw.defineComponent("road", {
     // Where the road meets its junctions: it leaves a gap within each one's mouth.
     const path = pw.curve.path(curve);
     const gaps = [];
+    // Each mouth where traffic comes in, for the lines across the way in: where along the road the line
+    // is, which way the traffic drives there (+1 toward larger d), and the junction's rule for this road.
+    const mouths = [];
     for (const field of JUNCTION_FIELDS) {
       const j = object.refs && object.refs[field];
       if (!j || !j.components.junction) continue;
       const centre = [j.matrix[9], j.matrix[10], j.matrix[11]];
-      for (const g of within(path, centre, mouthOf(j.components.junction))) gaps.push(g);
+      const rule = ruleFor(j, object);
+      for (const g of within(path, centre, mouthOf(j.components.junction))) {
+        gaps.push(g);
+        if (g[0] > 0.01) mouths.push({ at: g[0] - STOP_OUT, toward: 1, rule });
+        if (g[1] < m.total - 0.01) mouths.push({ at: g[1] + STOP_OUT, toward: -1, rule });
+      }
     }
     const terrain = object.refs && object.refs.terrain ? object.refs.terrain.id : null;
     let pieces = piecesOf(m.total, road.span > 0 ? road.span : p.span, rep, bridge, gaps).filter((q) => q.kind !== "gap");
@@ -491,6 +547,7 @@ pw.defineComponent("road", {
       if (!isBridge && atMouth(d0)) delete faces["start"];
       if (!isBridge && atMouth(d1)) delete faces["end"];
       const shape = { shape: "Sweep", outline, follow: "Upright", rings: "Square", interval: road.interval, faces, blend: isBridge ? 0 : road.blend };
+      const lines = isBridge ? null : linesOn(mouths, d0, d1);
       if (ground && !isBridge) shape[JOINS] = ground;
       const a = points[0].position, b = points[points.length - 1].position;
       out.push({
@@ -499,6 +556,7 @@ pw.defineComponent("road", {
           world_shape: shape,
           curve: { closed: false, points },
           material: { asset: p.material },
+          ...(lines ? { material_values: lines } : {}),
           road_segment: {
             road: object.name, index: k + 1, kind: isBridge ? "bridge" : "road", profile: profileName(road.profile),
             start: Math.round(d0 * 1000) / 1000, length: Math.round((d1 - d0) * 1000) / 1000,

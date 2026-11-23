@@ -24,6 +24,18 @@ param edge_width: f32 = 0.15 range(0, 0.5);    // the solid edge lines; 0 for no
 param hatch: f32 = 0.0 range(0, 10);           // metres between the shoulder's and median's hatch stripes; 0 plain
 param grain: f32 = 0.35 range(0, 1);
 param rough: f32 = 0.88 range(0, 1);
+// Where a span meets a junction, its own values (components/road.ts writes them on that span, Playweft
+// material values) draw the line across the way in. `_a` is the span's start end, `_b` its end end:
+// stop: how far along the span (u) the line is, 0 for none; rule: 1 give way (a double dashed line),
+// 2 stop (one wide solid line), 3 lights (one solid line); warn: over this many metres before the line
+// the centre line turns to long warning dashes. Braynard drives on the left, so the line crosses the half
+// the traffic comes in on: at the start end that's the +across side, at the end end the -across side.
+param stop_a: f32 = 0.0 range(0, 10000);
+param rule_a: f32 = 0.0 range(0, 3);
+param warn_a: f32 = 0.0 range(0, 100);
+param stop_b: f32 = 0.0 range(0, 10000);
+param rule_b: f32 = 0.0 range(0, 3);
+param warn_b: f32 = 0.0 range(0, 100);
 
 fn hash2(p: vec2<f32>) -> f32 {
     let q = fract(p * vec2<f32>(0.1031, 0.1030));
@@ -49,6 +61,19 @@ fn dashed(along: f32, on: f32, period: f32, aa: f32) -> f32 {
     return smoothstep(-aa, aa, t) * (1.0 - smoothstep(on - aa, on + aa, t));
 }
 
+// The line across the way in: `d` metres from where it stands, onto the road; `side` metres across into
+// the incoming half; `out` where that half ends.
+fn way_in(d: f32, side: f32, out: f32, rule: f32, aa: f32) -> f32 {
+    if rule < 0.5 || side < 0.0 || side > out { return 0.0; }
+    if rule < 1.5 {
+        // Give way: two dashed lines, 0.6 m dashes across the lane.
+        let dashes = dashed(side, 0.6, 0.9, aa);
+        return max(stroke(d - 0.15, 0.1, aa), stroke(d - 0.55, 0.1, aa)) * dashes;
+    }
+    if rule < 2.5 { return stroke(d - 0.15, 0.15, aa); }      // stop
+    return stroke(d - 0.1, 0.1, aa);                            // lights
+}
+
 // Diagonal stripes, `spacing` apart, about a third of it wide.
 fn hatched(along: f32, across: f32, spacing: f32, aa: f32) -> f32 {
     let t = fract((along + across) / spacing) * spacing;
@@ -70,9 +95,14 @@ fn surface(s: SurfaceIn) -> Surface {
 
     var paint = 0.0;
     let lanes_out = params.median + params.lanes * params.lane_width;   // where the lanes end
+    // Near a junction's line the centre line turns to long warning dashes.
+    let warning = (params.warn_a > 0.0 && along < params.stop_a + params.warn_a)
+        || (params.warn_b > 0.0 && params.stop_b > 0.0 && along > params.stop_b - params.warn_b);
     if params.median <= 0.0 {
         if params.centre >= 1.5 {
             paint = max(paint, stroke(across, params.line_width * 0.5, aa));
+        } else if warning {
+            paint = max(paint, stroke(across, params.line_width * 0.5, aa) * dashed(along, params.period * 0.75, params.period, aa));
         } else if params.centre >= 0.5 {
             paint = max(paint, stroke(across, params.line_width * 0.5, aa) * dashed(along, params.dash, params.period, aa));
         }
@@ -93,6 +123,15 @@ fn surface(s: SurfaceIn) -> Surface {
         if params.hatch > 0.0 && side > lanes_out + params.edge_width && side < params.half_width - 0.2 {
             paint = max(paint, hatched(along, side, params.hatch, aa));
         }
+    }
+
+    // The lines across the way in at the span's ends.
+    let lanes_in = min(lanes_out, params.half_width);
+    if params.stop_a > 0.0 {
+        paint = max(paint, way_in(along - params.stop_a, across, lanes_in, params.rule_a, aa));
+    }
+    if params.stop_b > 0.0 {
+        paint = max(paint, way_in(params.stop_b - along, -across, lanes_in, params.rule_b, aa));
     }
 
     let worn = 0.75 + 0.25 * smoothstep(0.2, 0.5, vnoise(s.world.xz * 2.5));

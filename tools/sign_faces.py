@@ -247,6 +247,17 @@ def plate(text, w=1.0, h=0.3):
     return img
 
 
+def all_way_plate(w=0.45, h=0.15):
+    """US ALL WAY plate (MUTCD R1-3P) under each Stop at an all-way stop: red, a thin white edge, white words."""
+    img, d = canvas(w, h)
+    rounded_board(d, w, h, US_RED, WHITE, 0.008, 0.006, 0.015)
+    f = font("lato", h * 0.5)
+    while width_m("ALL WAY", f) > w * 0.84:
+        f = font("lato", f.size / PX * CAP["lato"] * 0.95)
+    text_at(d, (w / 2, h / 2), "ALL WAY", f, WHITE, anchor="mm")
+    return img
+
+
 def street_name(name, sub="Braynard Town", w=1.5, h=0.5):
     """A town street nameplate: cream, red edge, black name, the town's name small beneath."""
     img, d = canvas(w, h)
@@ -464,6 +475,8 @@ def face_for_key(key):
     if kind == "guide":
         # guide:<place>|<distance>|<left|ahead|right>;<place>|…
         return guide_sign([tuple((part.split("|") + ["", ""])[:3]) for part in rest.split(";") if part])
+    if kind == "plate" and rest == "ALL WAY":
+        return all_way_plate()
     if kind == "plate":
         f = font("lato", 0.13)
         return plate(rest, w=max(1.0, round(width_m(rest, f) + 0.3, 2)))

@@ -52,6 +52,9 @@ const EASE = 10;
 // How far a natural road's embankment runs on in under a bridge at each end, sinking by its depth + 2 m
 // (1 in 2), so the bank slopes away into the ground with no square end face.
 const ABUTMENT = 8;
+// The tail's own blend. At the road's (1.25 on the Lane) it rounded into the bridge's concrete side walls
+// beside it, and the rounding took the concrete's colour in triangles: tan streaks along the abutment.
+const TAIL_BLEND = 0;
 // How far below the deck the tail's top starts under the bridge.
 const ABUT_BELOW = 0.15;
 // How deep a natural road's banks run near a bridge. The profiles' own depth (2 m) left the bank's toe
@@ -376,6 +379,57 @@ function linesOn(mouths, d0, d1) {
   return Object.keys(v).length ? v : null;
 }
 
+// What the objects naming this road ask of its deck's markings (Playweft #685, object.backRefs): a slip
+// that leaves or joins it breaks its edge line into a wide dotted line along the slip, on the slip's side
+// (US, MUTCD); a right-turn lane beside it puts ahead arrows in its through lane, level with the turn
+// lane's own (a left-turn pocket draws its own). Answers { gaps: [[from, to, side]], aheads: [[u, u, dir]] }
+// in metres along the road, side +1 its right (+across), dir +1 where traffic drives toward larger u.
+function sideMarksOf(object, path, total) {
+  const gaps = [], aheads = [];
+  for (const b of object.backRefs || []) {
+    const c = b.components || {};
+    if (b.component === "slip" && b.field === "main" && c.slip) {
+      const sl = c.slip;
+      const t = Math.max(1, sl.taper != null ? sl.taper : 60), par = Math.max(0, sl.parallel != null ? sl.parallel : 40);
+      const right = pick(sl.side != null ? sl.side : 0, SIDES) !== "left";
+      const at = Math.max(0, Math.min(total, sl.at || 0));
+      // As buildSlip lays it: on the right along the curve from `at`, on the left back from it.
+      const from = right ? at : Math.max(0, at - t - par), to = right ? Math.min(total, at + t + par) : at;
+      if (to - from >= 1) gaps.push([from, to, right ? 1 : -1]);
+    }
+    if (b.component === "approach" && b.field === "road" && c.approach) {
+      const ap = c.approach;
+      if (pick(ap.turn != null ? ap.turn : 0, TURNS) !== "right") continue;
+      const j = Object.values(object.refs || {}).find((r) => r && r.id === ap.junction && r.components.junction);
+      if (!j) continue;
+      const g = within(path, [j.matrix[9], j.matrix[10], j.matrix[11]], mouthOf(j.components.junction))[0];
+      if (!g) continue;
+      const dirIn = pick(ap.dir != null ? ap.dir : 0, ["in", "out"]) === "in";
+      // As buildApproach puts the turn lane's arrows: 12 and 24 m back from its line.
+      const dir = dirIn ? 1 : -1, line = dirIn ? g[0] - STOP_OUT : g[1] + STOP_OUT;
+      aheads.push([line - dir * 12, line - dir * 24, dir]);
+    }
+  }
+  return { gaps, aheads };
+}
+
+// A span's material values with the side marks that fall on it, in its own u.
+function marksOn(v, marks, d0, d1) {
+  const out = v ? Object.assign({}, v) : {};
+  const r3 = (x) => Math.round(x * 1000) / 1000;
+  let n = 0;
+  for (const [a, b, side] of marks.gaps) {
+    if (b < d0 || a > d1 || n >= 2) continue;
+    out[n++ ? "edge_gap_2" : "edge_gap"] = [r3(a - d0), r3(b - d0), side, 0];
+  }
+  n = 0;
+  for (const [u1, u2, dir] of marks.aheads) {
+    if (Math.max(u1, u2) + 7 < d0 || Math.min(u1, u2) - 7 > d1 || n >= 2) continue;
+    out[n++ ? "ahead_2" : "ahead"] = [r3(u1 - d0), r3(u2 - d0), dir, 0];
+  }
+  return Object.keys(out).length ? out : null;
+}
+
 // How each profile's deck is marked, as its material says (assets "Road deck: …"), for carrying a
 // priority road's lines across a pad: [lanes out, line width, edge width, centre (1 dashed, 2 solid)],
 // [dash, period].
@@ -512,6 +566,7 @@ pw.defineComponent("road", {
         if (g[1] < m.total - 0.01) mouths.push({ at: g[1] + STOP_OUT, toward: -1, rule, nose, point: g[1] + 4 });
       }
     }
+    const sideMarks = sideMarksOf(object, path, m.total);
     const terrain = object.refs && object.refs.terrain ? object.refs.terrain.id : null;
     let pieces = piecesOf(m.total, road.span > 0 ? road.span : p.span, rep, bridge, gaps).filter((q) => q.kind !== "gap");
     const natural = isNatural(road);
@@ -597,7 +652,7 @@ pw.defineComponent("road", {
       if (!isBridge && atMouth(d0)) delete faces["start"];
       if (!isBridge && atMouth(d1)) delete faces["end"];
       const shape = { shape: "Sweep", outline, follow: "Upright", rings: "Square", interval: road.interval, faces, blend: isBridge ? 0 : road.blend };
-      const lines = isBridge ? null : linesOn(mouths, d0, d1);
+      const lines = isBridge ? null : marksOn(linesOn(mouths, d0, d1), sideMarks, d0, d1);
       // A bridge's span joins the ground's group too (hard, at blend 0): built in a group of its own its deck
       // met the blended road's at a sub-centimetre seam that read as a ragged crest at kart height (Playweft).
       if (ground) shape[JOINS] = ground;
@@ -634,7 +689,7 @@ pw.defineComponent("road", {
           pts[pts.length - 1].section = end === "start" ? sunk : top;
           const faces = Object.assign({}, sec.faces);
           delete faces[end === "start" ? "start" : "end"];          // the face against the road is inside it
-          const tail = { shape: "Sweep", outline: top, follow: "Upright", rings: "Square", interval: 1, faces, blend: road.blend };
+          const tail = { shape: "Sweep", outline: top, follow: "Upright", rings: "Square", interval: 1, faces, blend: TAIL_BLEND };
           if (ground) tail[JOINS] = ground;
           out.push({ name: "abutment " + end, components: { world_shape: tail, curve: { closed: false, points: pts }, material: { asset: GRASS } } });
         }
@@ -1278,7 +1333,11 @@ function buildJunction(junction, object) {
     // It reaches CUT_REACH along each arm, well into the arm's own cutting, so no sliver of ground is
     // left standing between the two.
     const cut = onPlane(shapeOf(reachOut, CUT_REACH), y - CUT_BELOW + CUT_H, plane.b, plane.c, CUT_H);
-    children.push({
+    // Before the pad: where the ground and its Height Map are one object, the cut and the pad come to one
+    // place in that group and are built in the document's order (Playweft, "Cutting from outside the
+    // group"), and a cut after the pad shaved its top 8 cm off (CUT_BELOW): a step at every roundabout
+    // entry where the corner shoulders stand at deck height.
+    children.splice(children.findIndex((c) => c.name === "pad"), 0, {
       name: "clear",
       position: cut.position, rotation: cut.rotation, scale: [1, CUT_H, 1],
       components: { world_shape: { shape: "Extrude", operation: "Subtract", outline: cut.outline, cuts: terrainId, blend: CUT_BLEND } },

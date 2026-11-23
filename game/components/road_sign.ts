@@ -36,6 +36,7 @@ const FACES = {
   "plate:Stop 100 m": { m: "01M823ZVXKF2JYNX4STG3B5R20", w: 1.2312, h: 0.3 },
   "plate:Give way 50 m": { m: "01M823ZXR7BRYDFY05MT0DCNG4", w: 1.4906, h: 0.3 },
   "plate:Ford": { m: "01M7GE3HQ8DXCSDK3GQBGVFY8B", w: 1.0, h: 0.3 },
+  "plate:ALL WAY": { m: "01M840VW0RQGKJES1J1ZR679X8", w: 0.45, h: 0.15 },
   "warn:bend right": { m: "01M7GE3CK524VA8DYN5THNRNEF", w: 1.2, h: 1.0406 },
   "warn:cattle": { m: "01M7GE3E9W4YBAY1GCPVV1WJPX", w: 1.2, h: 1.0406 },
   "warn:ford": { m: "01M7GE3G0KBE1VWM96030WWKZQ", w: 1.2, h: 1.0406 },
@@ -424,12 +425,18 @@ function planJunction(values, object) {
       else rule = through.includes(a.id) ? "priority" : (control === "stop" ? "stop" : "give way");
     }
     a.rule = rule;
+  }
+  // Where every arm stops, each Stop carries an ALL WAY plate beneath it (US, MUTCD R1-3P).
+  const allWay = arms.length >= 3 && arms.every((a) => a.rule === "stop");
+
+  for (const a of arms) {
+    const rule = a.rule;
     const [hw, verge] = edgeOf(a.road);
     const off = hw + verge * 0.7;
     const lineAt = a.at + a.sign * plan.line;
     // The warning diamond ahead on a fast road (US): Stop ahead, Yield ahead, Signal ahead.
     const warn = rule === "stop" ? "stop ahead" : rule === "give way" ? "yield ahead" : rule === "lights" ? "signal ahead" : "";
-    const advAt = lineAt + a.sign * 60;
+    const advAt = offBridge(a, lineAt + a.sign * 60, lineAt);
     if (warn && plan.advance && fastRoad(a.road) && advAt > 0 && advAt < a.path.length) {
       const f = a.path.at(advAt);
       const tw = norm2(-f.along[0] * a.sign, -f.along[2] * a.sign);
@@ -445,7 +452,9 @@ function planJunction(values, object) {
     // At the line: `line` metres out from the mouth, along the road. A US yield, not a British give way.
     const p = a.path.at(Math.max(0, Math.min(a.path.length, lineAt))).position;
     const family = rule === "give way" ? "yield" : "stop";
-    missing.push(...placeSign(out, "arm " + a.n + " " + family, { family }, [p[0] + side[0] * off, p[1], p[2] + side[1] * off], yaw));
+    const values = { family };
+    if (family === "stop" && allWay) values.plate = "ALL WAY";
+    missing.push(...placeSign(out, "arm " + a.n + " " + family, values, [p[0] + side[0] * off, p[1], p[2] + side[1] * off], yaw));
   }
 
   // The guide sign (US): on the approach of the first minor arm (or arm 1), on its traffic's side, 30 m
@@ -470,7 +479,8 @@ function planJunction(values, object) {
     }
     lines.sort((p, q) => p.turn - q.turn);                // left first, then ahead, then right
     if (lines.length) {
-      const at = reader.at + reader.sign * (plan.line + 30);
+      const lineAt = reader.at + reader.sign * plan.line;
+      const at = offBridge(reader, lineAt + reader.sign * 30, lineAt);
       if (at > 0 && at < reader.path.length) {
         const f = reader.path.at(at);
         const tw = norm2(-f.along[0] * reader.sign, -f.along[2] * reader.sign);
@@ -485,6 +495,21 @@ function planJunction(values, object) {
     }
   }
   return { children: out, missing, arms };
+}
+
+// A sign meant to stand `at` metres along an arm's road, moved off its bridge: a sign beside a bridge
+// stood behind the parapet (Spike: Junctions' 3-way). The bridge, with BRIDGE_CLEAR metres either side
+// for its rounding to the road's repeat and the embankment's ends, is kept clear. It moves to the
+// bridge's junction side if that leaves 10 m from the line, else to its far side.
+const BRIDGE_CLEAR = 15;
+function offBridge(a, at, lineAt) {
+  const r = a.road || {};
+  if (!(r.bridge_to > r.bridge_from && r.bridge_to > 0)) return at;
+  const lo = r.bridge_from - BRIDGE_CLEAR, hi = r.bridge_to + BRIDGE_CLEAR;
+  if (at <= lo || at >= hi) return at;
+  // a.sign: +1 where going out from the junction runs toward larger distances along the road.
+  const near = a.sign > 0 ? lo : hi, far = a.sign > 0 ? hi : lo;
+  return (near - lineAt) * a.sign >= 10 ? near : far;
 }
 
 pw.defineComponent("sign_plan", PLAN_FIELDS, {

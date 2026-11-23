@@ -78,6 +78,14 @@ param lane_line: vec4f = (0.0, 0.0, 0.0, 0.0);
 // 0]; its lane is [0, through lane width, which way traffic drives along u, 2], and arrows and lane_line
 // as a turn lane's.
 param pocket: vec4f = (0.0, 0.0, 0.0, 0.0);
+// On a road's deck (role 0), from the objects that name the road (components/road.ts, sideMarksOf): where
+// a slip leaves or joins it, the edge line on that side is a wide dotted line, [u0, u1, side (+1 right,
+// -1 left, 0 none), 0]; beside a right-turn lane, ahead arrows in the through lane next to it, their
+// tails at [u, u, which way traffic drives along u (+1/-1, 0 none), 0]. Two of each per span.
+param edge_gap: vec4f = (0.0, 0.0, 0.0, 0.0);
+param edge_gap_2: vec4f = (0.0, 0.0, 0.0, 0.0);
+param ahead: vec4f = (0.0, 0.0, 0.0, 0.0);
+param ahead_2: vec4f = (0.0, 0.0, 0.0, 0.0);
 // Wear: how strongly the wheel tracks, braking grime, dirty edges and patches show (0 none, 1 full).
 param wear: f32 = 1.0 range(0, 2);
 
@@ -257,6 +265,19 @@ fn arrow(q: vec2<f32>, kind: f32, aa: f32) -> f32 {
     return max(body, head);
 }
 
+// Whether this spot of a deck is beside a slip: within [g.x, g.y] along, on g.z's side.
+fn by_slip(along: f32, across: f32, g: vec4<f32>) -> bool {
+    return g.z != 0.0 && across * g.z > 0.0 && along >= g.x && along <= g.y;
+}
+
+// Two ahead arrows in the lane centred `c` metres out on the traffic's right, tails at a.x and a.y,
+// traffic driving along u when a.z is +1, against it when -1.
+fn ahead_arrows(along: f32, across: f32, c: f32, a: vec4<f32>, aa: f32) -> f32 {
+    if a.z == 0.0 { return 0.0; }
+    let lat = (across - a.z * c) * -a.z;
+    return max(arrow(vec2<f32>((along - a.x) * a.z, lat), 1.0, aa), arrow(vec2<f32>((along - a.y) * a.z, lat), 1.0, aa));
+}
+
 // Chevron hatching in a strip: stripes `spacing` apart along u, folded about the strip's middle.
 fn chevrons(u: f32, from_mid: f32, spacing: f32, aa: f32) -> f32 {
     let t = fract((u + abs(from_mid)) / spacing) * spacing;
@@ -377,13 +398,25 @@ fn surface(s: SurfaceIn) -> Surface {
     }
     // The edge line where the lanes end, and the hard shoulder beyond it.
     if own_lanes && params.edge_width > 0.0 && lanes_out < params.half_width {
-        let edge_line = stroke(side - lanes_out, params.edge_width * 0.5, aa);
+        var edge_line = stroke(side - lanes_out, params.edge_width * 0.5, aa);
+        // Beside a slip: a wide dotted line, 0.9 m on in every 3.6 m (white either side).
+        let slip_by = params.role < 0.5 && (by_slip(along, across, params.edge_gap) || by_slip(along, across, params.edge_gap_2));
+        if slip_by {
+            edge_line = stroke(side - lanes_out, 0.1, aa) * dashed(along, 0.9, 3.6, aa);
+        }
         // A one-way road's left edge (driving along u, its left is -across) is yellow.
-        if params.one_way > 0.5 && across < 0.0 { ypaint = max(ypaint, edge_line); }
+        if params.one_way > 0.5 && across < 0.0 && !slip_by { ypaint = max(ypaint, edge_line); }
         else { paint = max(paint, edge_line); }
         if params.hatch > 0.0 && side > lanes_out + params.edge_width && side < params.half_width - 0.2 {
             paint = max(paint, hatched(along, side, params.hatch, aa));
         }
+    }
+
+    // Ahead arrows in the through lane beside a right-turn lane.
+    if params.role < 0.5 {
+        let c = lanes_out - params.lane_width * 0.5;
+        paint = max(paint, ahead_arrows(along, across, c, params.ahead, aa));
+        paint = max(paint, ahead_arrows(along, across, c, params.ahead_2, aa));
     }
 
     // A junction's pad: the priority road carried through; a roundabout's: its give-way lines.

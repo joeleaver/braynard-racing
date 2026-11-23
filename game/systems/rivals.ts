@@ -13,6 +13,7 @@
 //
 // Runs in `act`, before the kart reads its asks.
 import { dev } from "./state";
+import { colourOf, rivalsObey, stopLines } from "./signals";
 
 const K = pw.component("kart");
 const V = pw.component("rival");
@@ -129,6 +130,44 @@ const noise = () => Math.random() * 2 - 1;
 
 const nearby = pw.sphere(3.5);
 
+/**
+ * The stop line a rival is coming up to on its side of the road, if it must stop or slow for it: the
+ * speed it may carry from here (braking at `brakeRate` to stop 2 m short of the line, or to a crawl over a
+ * stop or give-way line), and whether a red light holds it there (so it isn't "stuck").
+ */
+function lineAhead(at, forward, speed, brakeRate) {
+  const reach = 20 + (speed * speed) / (2 * Math.max(brakeRate, 1));
+  let best = null;
+  for (const s of stopLines) {
+    if (s.rule === "priority" || s.rule === "") continue;
+    // The line runs from the road's middle to its incoming edge; the arm runs out of the junction along u.
+    const e = [s.edge[0] - s.middle[0], s.edge[2] - s.middle[2]];
+    const half = Math.hypot(e[0], e[1]);
+    if (half < 0.1) continue;
+    const across = [e[0] / half, e[1] / half];
+    const u = [across[1], -across[0]];
+    // Coming in: heading against u.
+    if (forward[0] * u[0] + forward[2] * u[1] > -0.5) continue;
+    const p = [at[0] - s.middle[0], at[2] - s.middle[2]];
+    const before = p[0] * u[0] + p[1] * u[1];
+    const side = p[0] * across[0] + p[1] * across[1];
+    if (before < 0.5 || before > reach || side < -1 || side > half + 1.5) continue;
+    let cap = Infinity, held = false;
+    if (s.rule === "lights") {
+      const c = colourOf(s.key, s.group);
+      const canStop = (speed * speed) / (2 * Math.max(brakeRate, 1)) < before - 2;
+      if (c === "red" || (c === "amber" && canStop)) {
+        cap = Math.sqrt(2 * brakeRate * Math.max(0, before - 2));
+        held = c === "red";
+      }
+    } else {
+      cap = Math.sqrt(16 + 2 * brakeRate * Math.max(0, before - 2));
+    }
+    if (cap < Infinity && (best === null || cap < best.cap)) best = { cap, held };
+  }
+  return best;
+}
+
 pw.registerSystem("rivals", { includeComponents: ["kart", "rival", "rigid_body"] }, ({ objects, physics }) => {
   const dt = objects.dt;
   for (const kart of objects) {
@@ -205,6 +244,17 @@ pw.registerSystem("rivals", { includeComponents: ["kart", "rival", "rigid_body"]
     }
     target = Math.max(target, kart.get(k.driftMinSpeed) + 1);
 
+    // The road's rules, where rivals obey them (systems/signals.ts: free roam, by the design's proposal):
+    // stop before a red light, or an amber it can stop for; slow right down over a stop or give-way line.
+    let held = false;
+    if (rivalsObey()) {
+      const line = lineAhead(at, forward, speed, brakeRate);
+      if (line !== null) {
+        target = Math.min(target, line.cap);
+        held = line.held;
+      }
+    }
+
     // The drift: into a corner that turns far and lasts long enough for sparks, at speed, held while
     // the road keeps turning the same way. Only with the kart already steering into that corner and lined
     // up with the road, so a drift never starts while it is still catching the last one; and, before a bend
@@ -253,7 +303,7 @@ pw.registerSystem("rivals", { includeComponents: ["kart", "rival", "rigid_body"]
 
     // Lost: stopped, or a long way off the road, for too long once the race is on.
     let stuck = kart.get(r.stuck);
-    stuck = racing && (Math.abs(speed) < 1 || Math.abs(near.offset) > 9) ? stuck + dt : 0;
+    stuck = racing && !held && (Math.abs(speed) < 1 || Math.abs(near.offset) > 9) ? stuck + dt : 0;
     const respawn = stuck > kart.get(r.stuckAfter) ? 1 : 0;
     if (respawn) stuck = 0;
 

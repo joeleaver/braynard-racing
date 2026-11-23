@@ -25,6 +25,7 @@ import "./systems/pull_ups";
 import "./systems/settings";
 import "./systems/world";
 import "./systems/driver";
+import "./systems/signals";
 import "./systems/rivals";
 import "./systems/dev_hold";
 import "./systems/kart";

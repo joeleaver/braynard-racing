@@ -611,6 +611,7 @@ pw.defineComponent("junction", {
 // at its centre. Each arm is a child "arm N" carrying a road_arm, standing at the middle of its stop line.
 pw.defineComponent("road_node", {
   junction: pw.text("", { doc: "The junction object's name." }),
+  key: pw.text("", { doc: "Names this junction apart from others of the same name: its roads' ids, sorted. Its arms and lamps carry it too." }),
   control: pw.text("priority", { doc: "priority, stop, all-way stop, lights or roundabout." }),
   arms: pw.int(0, { doc: "How many arms." }),
   mouth: pw.float(12, { unit: "m", doc: "How far from the centre the roads stop." }),
@@ -624,12 +625,14 @@ pw.defineComponent("road_node", {
   green: pw.float(18, { unit: "s", group: "Signals", doc: "How long each phase is green." }),
   amber: pw.float(3, { unit: "s", group: "Signals", doc: "Amber after each green." }),
   all_red: pw.float(2, { unit: "s", group: "Signals", doc: "All red between phases." }),
+  clock: pw.float(0, { unit: "s", group: "Signals", doc: "Seconds the lights have run (systems/signals.ts). Game state, so a rewind or a joining player has it." }),
 });
 
 // One lamp of a junction's signal head, as game code finds it: it sets the lamp's brightness (through
 // its material's values) from the junction's signal plan and the clock.
 pw.defineComponent("signal_lamp", {
   junction: pw.text("", { doc: "The junction object's name." }),
+  key: pw.text("", { doc: "Its junction's road_node key." }),
   arm: pw.int(1, { doc: "Which arm's head." }),
   group: pw.int(1, { doc: "The signal group it shows." }),
   colour: pw.oneOf("red", "amber", "green", { doc: "Which lamp." }),
@@ -640,6 +643,7 @@ pw.defineComponent("signal_lamp", {
 // it comes into it.
 pw.defineComponent("road_arm", {
   junction: pw.text("", { doc: "The junction object's name." }),
+  key: pw.text("", { doc: "Its junction's road_node key." }),
   index: pw.int(1, { doc: "Which arm, in order round the centre (counter-clockwise seen from above, from -x)." }),
   road: pw.text("", { doc: "The road object's name." }),
   dir: pw.oneOf("in", "out", { doc: "out: going forward along the road leaves the junction here; in: it comes in." }),
@@ -1058,10 +1062,12 @@ function buildJunction(junction, object) {
   const y = plane.a + DECK_Y;
   const ground = object.refs && object.refs.ground ? object.refs.ground.id : null;
   const verge = arms.reduce((v, arm) => Math.max(v, arm.verge), 0);
+  // Junction objects share names; their roads don't share ids.
+  const key = [...new Set(arms.map((a) => a.id))].sort().join("+");
   const children = [{
     name: "node",
     position: [0, y, 0],
-    components: { road_node: { junction: object.name, control: controlOf(junction), arms: arms.length, mouth: mouthOf(junction) } },
+    components: { road_node: { junction: object.name, key, control: controlOf(junction), arms: arms.length, mouth: mouthOf(junction) } },
   }];
   const rules = rulesOf(junction, object, arms);
   // With lights: one phase per signal group, in order round the junction (at most four).
@@ -1085,12 +1091,16 @@ function buildJunction(junction, object) {
       position: [rd(mid[0]), rd(sy), rd(mid[2])],
       components: {
         road_arm: {
-          junction: object.name, index: i + 1, road: arm.road, dir: arm.dir, at: rd(arm.at),
+          junction: object.name, key, index: i + 1, road: arm.road, dir: arm.dir, at: rd(arm.at),
           heading: Math.round(Math.atan2(arm.u[2], arm.u[0]) * 1800 / Math.PI) / 10,
           half_width: arm.half, profile: arm.profile, rule: rules[i].rule, signal_group: rules[i].group,
           stop_at: rd(mouthOf(junction) + STOP_OUT),
           stop_l_x: rd(l[0]), stop_l_y: rd(sy), stop_l_z: rd(l[2]), stop_r_x: rd(r[0]), stop_r_y: rd(sy), stop_r_z: rd(r[2]),
         },
+        // The stop line across the way in, from the road's middle to its incoming edge (Braynard drives on
+        // the left), as a curve: game code reads a curve in the world, so rivals find the line wherever the
+        // junction stands.
+        curve: { closed: false, points: [{ position: [0, 0, 0], handle_in: [0, 0, 0], handle_out: [0, 0, 0] }, { position: [rd(l[0] - mid[0]), 0, rd(l[2] - mid[2])], handle_in: [0, 0, 0], handle_out: [0, 0, 0] }] },
       },
     });
   });
@@ -1119,7 +1129,7 @@ function buildJunction(junction, object) {
         const at = add(base, scaled(arm.u, 0.24));
         children.push({
           name: nm + " " + colour, position: [rd(at[0]), rd(by + 3.3 - k * 0.3), rd(at[2])], scale: [0.2, 0.2, 0.2],
-          components: { mesh: { shape: "Sphere", cast_shadows: false }, material: { asset: SIGNAL_LAMP[colour] }, signal_lamp: { junction: object.name, arm: i + 1, group: g, colour } },
+          components: { mesh: { shape: "Sphere", cast_shadows: false }, material: { asset: SIGNAL_LAMP[colour] }, signal_lamp: { junction: object.name, key, arm: i + 1, group: g, colour } },
         });
       });
     });

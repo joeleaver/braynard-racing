@@ -709,6 +709,181 @@ pw.defineComponent("road", {
   },
 });
 
+// ---- The ground between two close roads ------------------------------------------------------------
+// Where two roads run side by side closer than their banks' width, the ground between them was left as it
+// was: a ditch along one road's shoulder against a ridge of ground, or a V where two banks met (Home Farm's
+// On-ramp beside the Ring). `road_fill` goes on the ground object the roads name as their `ground`, and
+// reads every one of them from its back-references. Along each stretch where two roads are nearly parallel
+// and the gap between their shoulders' outer edges is under `reach`, it lays the ground between level: a
+// straight line from one shoulder's edge to the other's, cut down to where the ground stands above it and
+// filled up to where it lies below. Roads further apart, roads that cross, bridges, and gaps steeper than
+// `steep` across (one road well above the other) are left alone, so nothing is laid for them. The object
+// must be unscaled (a group, or a Height Map at scale 1): on a scaled one it lays nothing.
+const FILL_STEP = 4, FILL_PARALLEL = Math.cos(25 * Math.PI / 180), FILL_BRIDGE = 15;
+pw.defineComponent("road_fill", {
+  reach: pw.float(12, { unit: "m", range: [1, 60], doc: "The widest gap between two roads' shoulders that is laid level." }),
+  steep: pw.float(0.5, { range: [0.05, 2], doc: "The steepest the level ground may be across the gap (rise over run). Steeper pairs, one road well above the other, are left alone." }),
+  blend: pw.float(1.5, { unit: "m", range: [0, 10], doc: "How far the laid ground melts into the ground and the roads' banks." }),
+}, {
+  build(fill, object) {
+    return buildFill(fill, object);
+  },
+});
+
+function buildFill(fill, object) {
+  const reach = fill.reach > 0 ? fill.reach : 12, steep = fill.steep > 0 ? fill.steep : 0.5;
+  const blend = fill.blend >= 0 ? fill.blend : 1.5;
+  // Every road naming this object as its ground, sampled every FILL_STEP metres.
+  const roads = [];
+  for (const b of object.backRefs || []) {
+    if (b.component !== "road" || b.field !== "ground") continue;
+    const c = b.components || {};
+    if (!c.curve || !c.road || !c.curve.points || c.curve.points.length < 2) continue;
+    // Roads come through in this object's space: on a scaled object (a stretched ground box) every distance
+    // would be wrong, and what's laid would stretch with it. Lay nothing there.
+    const M = b.matrix, col = (k) => Math.hypot(M[3 * k], M[3 * k + 1], M[3 * k + 2]);
+    if ([0, 1, 2].some((k) => Math.abs(col(k) - 1) > 1e-3)) return [];
+    const curve = throughMatrix(c.curve, b.matrix);
+    const path = pw.curve.path(curve), m = measure(curve);
+    const chain = topChain(profileOf(c.road.profile), isNatural(c.road));
+    const [sx, sy] = chain[chain.length - 1];               // the shoulder's outer edge, from the middle
+    const br = c.road.bridge_to > c.road.bridge_from && c.road.bridge_to > 0 ? [c.road.bridge_from - FILL_BRIDGE, c.road.bridge_to + FILL_BRIDGE] : null;
+    const samples = [];
+    for (let d = 0; d <= m.total; d += FILL_STEP) {
+      const f = path.at(d);
+      samples.push({ d, x: f.position[0], y: f.position[1], z: f.position[2], rx: f.right[0], rz: f.right[2], ax: f.along[0], az: f.along[2], off: !!(br && d > br[0] && d < br[1]) });
+    }
+    roads.push({ id: b.id, m, path, sx, sy, samples, terrain: typeof c.road.terrain === "string" ? c.road.terrain : null });
+  }
+  if (roads.length < 2) return [];
+  // A grid of every sample, so each finds its near neighbours on the other roads quickly.
+  const CELL = 30, grid = new Map(), key = (x, z) => Math.floor(x / CELL) + "," + Math.floor(z / CELL);
+  roads.forEach((r, i) => r.samples.forEach((s, k) => {
+    const g = key(s.x, s.z);
+    if (!grid.has(g)) grid.set(g, []);
+    grid.get(g).push([i, k]);
+  }));
+  // How the gap between road A at sample s and road B at sample t is: null when it isn't one to lay.
+  const gapOf = (A, s, B, t) => {
+    if (s.off || t.off) return null;
+    if (Math.abs(s.ax * t.ax + s.az * t.az) < FILL_PARALLEL) return null;       // crossing, not side by side
+    const dx = t.x - s.x, dz = t.z - s.z, D = Math.hypot(dx, dz);
+    const l = dx * s.rx + dz * s.rz;
+    if (Math.abs(l) < 0.9 * D) return null;                                     // ahead, not beside
+    const gap = Math.abs(l) - A.sx - B.sx;
+    if (gap < 0.3 || gap > reach) return null;
+    const hA = s.y + A.sy, hB = t.y + B.sy;
+    if (Math.abs(hA - hB) > steep * gap) return null;
+    return { l, gap, hA, hB };
+  };
+  // For each sample of each road, the nearest sample on another road that makes a gap to lay. A pair is laid
+  // along the road with the smaller id, so it's laid once.
+  const out = [];
+  let runs = 0;
+  roads.forEach((A, i) => {
+    let run = null;
+    const flush = () => {
+      if (run && run.k1 > run.k0) out.push(...layFill(A, roads[run.j], run, reach, steep, blend, gapOf, object, ++runs));
+      run = null;
+    };
+    A.samples.forEach((s, k) => {
+      const gx = Math.floor(s.x / CELL), gz = Math.floor(s.z / CELL);
+      let best = null;
+      for (let ix = gx - 1; ix <= gx + 1; ix++) for (let iz = gz - 1; iz <= gz + 1; iz++) {
+        for (const [j, kk] of grid.get(ix + "," + iz) || []) {
+          if (j === i) continue;
+          const B = roads[j], t = B.samples[kk];
+          const D = Math.hypot(t.x - s.x, t.z - s.z);
+          if (D > A.sx + B.sx + reach + 1) continue;
+          if (!best || D < best.D) best = { j, kk, D };
+        }
+      }
+      const ok = best && A.id < roads[best.j].id && gapOf(A, s, roads[best.j], roads[best.j].samples[best.kk]);
+      if (ok && run && run.j === best.j && run.k1 === k - 1) run.k1 = k;
+      else { flush(); if (ok) run = { j: best.j, k0: k, k1: k }; }
+    });
+    flush();
+  });
+  return out;
+}
+
+// One stretch of level ground between road A and road B, from A's sample k0 to k1: a cut down to the line
+// between the two shoulders' outer edges (where the ground stands above it), then a fill up to it. One sample
+// on past each end its line sinks below both shoulders and the cut rises above them, so both ease out.
+function layFill(A, B, run, reach, steep, blend, gapOf, object, n) {
+  const d0 = Math.max(0, A.samples[run.k0].d - FILL_STEP), d1 = Math.min(A.m.total, A.samples[run.k1].d + FILL_STEP);
+  // B's nearest sample to a point, and the gap there.
+  // B's point beside a point of A: where A's sideways line through it crosses B (B's samples joined
+  // straight). Not B's nearest point: where B runs at an angle that lies metres ahead, and the gap measured to
+  // it came out short. Answers B's point there and how far along A's right it is, or null.
+  const crossB = (s) => {
+    const S = B.samples;
+    let best = null;
+    for (let i = 0; i + 1 < S.length; i++) {
+      const a = S[i], b = S[i + 1];
+      // s + u·r = a + v·(b − a), in x and z.
+      const ex = b.x - a.x, ez = b.z - a.z;
+      const den = s.rx * ez - s.rz * ex;
+      if (Math.abs(den) < 1e-9) continue;
+      const wx = a.x - s.x, wz = a.z - s.z;
+      const u = (wx * ez - wz * ex) / den, v = (wx * s.rz - wz * s.rx) / den;
+      if (v < 0 || v > 1 || Math.abs(u) > A.sx + B.sx + reach + 30) continue;
+      if (best && Math.abs(u) >= Math.abs(best.l)) continue;
+      const lerp = (p, q) => p + (q - p) * v;
+      best = { l: u, t: { x: lerp(a.x, b.x), y: lerp(a.y, b.y), z: lerp(a.z, b.z), rx: lerp(a.rx, b.rx), rz: lerp(a.rz, b.rz), ax: lerp(a.ax, b.ax), az: lerp(a.az, b.az), off: a.off || b.off } };
+    }
+    return best;
+  };
+  const points = [];
+  for (let a = d0; a < d1 - 0.01; a += FILL_STEP) {
+    const pts = piece(A.m, a, Math.min(d1, a + FILL_STEP));
+    if (points.length) { points[points.length - 1].handle_out = pts[0].handle_out; pts.shift(); }
+    for (const q of pts) points.push(q);
+  }
+  if (points.length < 2) return [];
+  const r = (v) => Math.round(v * 1000) / 1000;
+  const cutPts = [];
+  let side = 0;
+  for (const q of points) {
+    const along = nearestAlong(A.m, q.position, d0, d1);
+    const f = A.path.at(along);
+    const s = { x: f.position[0], y: f.position[1], z: f.position[2], rx: f.right[0], rz: f.right[2], ax: f.along[0], az: f.along[2], off: false };
+    const c = crossB(s);
+    // B's shoulder edge is B.sx from its middle square to B; along A's sideways line that's B.sx / cos.
+    const cos = c ? Math.max(0.5, Math.abs(s.rx * c.t.rx + s.rz * c.t.rz)) : 1;
+    let g = c && gapOf(A, s, B, c.t) ? { l: c.l, hA: s.y + A.sy, hB: c.t.y + B.sy } : null;
+    if (g) side = Math.sign(g.l);
+    if (!side) side = c ? Math.sign(c.l) || 1 : 1;
+    if (!g) {
+      // Past the stretch: carry the last side, sunk (the fill) and raised (the cut), so both ease out.
+      const l = c ? Math.abs(c.l) : A.sx + B.sx / cos + 0.3;
+      g = { l: side * Math.max(l, A.sx + B.sx / cos + 0.3), hA: s.y + A.sy, hB: (c ? c.t.y : s.y) + B.sy, end: true };
+    }
+    // Across A, from its shoulder's edge to B's: a little into each, so the laid ground meets them.
+    const inner = side * (A.sx - 0.3), outer = side * (Math.abs(g.l) - B.sx / cos + 0.3);
+    let hIn = g.hA - s.y, hOut = g.hB - s.y;
+    const low = Math.min(hIn, hOut), high = Math.max(hIn, hOut);
+    const xl = Math.min(inner, outer), xr = Math.max(inner, outer);
+    const hl = xl === inner ? hIn : hOut, hr = xl === inner ? hOut : hIn;
+    const sink = g.end ? 1.0 : 0, lift = g.end ? 0.8 : 0;
+    q.section = [[r(xl), r(low - 3)], [r(xr), r(low - 3)], [r(xr), r(hr - sink)], [r(xl), r(hl - sink)]];
+    cutPts.push({ position: q.position, handle_in: q.handle_in, handle_out: q.handle_out,
+      section: [[r(xl), r(hl + lift)], [r(xr), r(hr + lift)], [r(xr), r(high + CUT_H)], [r(xl), r(high + CUT_H)]] });
+  }
+  const kids = [];
+  const terrain = A.terrain || B.terrain;
+  if (terrain) {
+    kids.push({ name: "level cut " + n, components: {
+      world_shape: { shape: "Sweep", operation: "Subtract", outline: cutPts[cutPts.length - 1].section, follow: "Upright", rings: "Square", interval: 1, cuts: terrain, blend: CUT_BLEND },
+      curve: { closed: false, points: cutPts },
+    } });
+  }
+  const shape = { shape: "Sweep", outline: points[points.length - 1].section, follow: "Upright", rings: "Square", interval: 1, faces: {}, blend };
+  shape[JOINS] = object.id;
+  kids.push({ name: "level fill " + n, components: { world_shape: shape, curve: { closed: false, points }, material: { asset: GRASS } } });
+  return kids;
+}
+
 // One span of a road, as game code reads the road graph. Its object's Curve is the span itself.
 pw.defineComponent("road_segment", {
   road: pw.text("", { doc: "The road object it belongs to." }),
@@ -1432,6 +1607,8 @@ const SLIP_KINDS = ["off-ramp", "on-ramp"];
 // How wide a taper's thin end is beyond the main road's edge (it starts inside the main road's deck). Small, so
 // its shoulder and bank start on the main road's and grow out of them: 0.6 left a square step there.
 const THIN = 0.05;
+// How far a slip's ground cut runs on past the ramp mouth, so it overlaps the ramp road's own cut.
+const MOUTH_CUT = 6;
 const SIDES = ["right", "left"];
 
 // A curve's points carried through a matrix (twelve numbers, as object.refs gives), into the builder's space.
@@ -1513,6 +1690,13 @@ function buildSlip(slip, object) {
   const curve = throughMatrix(main.components.curve, main.matrix);
   const m = measure(curve);
   const e = mp.deck + mp.kerb, width = 2 * rp.deck;
+  // The taper's outer shoulder is the ramp's: the lane it adds is the ramp's lane, and the ramp ends against it
+  // at the mouth. With the main road's own (a freeway's 1 m edge strip and 2 m roll against a slip road's 0.3 m
+  // and 1.2 m) the taper's tarmac strip stood over the ramp's grass there, and the blend rounded it into a lump
+  // under the edge line. The deck keeps the main road's cross-slope. Without a natural ramp road, the main road's.
+  const tp = ramp && ramp.components.road && isNatural(ramp.components.road) && nat
+    ? Object.assign({}, mp, { natural: Object.assign({}, rp.natural, { crossfall: mp.natural.crossfall }) })
+    : mp;
   // Off-ramp: thin end at `at`, widening to full over the taper, then full to the mouth.
   // On-ramp: the mouth at `at`, full along the parallel, then narrowing to nothing.
   // Braynard drives on the right (Joe, 2026-11-22): on the main road's right its traffic runs along the
@@ -1534,8 +1718,8 @@ function buildSlip(slip, object) {
     if (d1 - d0 < 0.01) continue;
     const pts = piece(m, d0, d1);
     if (points.length) { points[points.length - 1].handle_out = pts[0].handle_out; pts.shift(); }
-    else { pts[0].section = taperSection(mp, e, w0, mirror, nat).outline; pts[0]._w = w0; }
-    pts[pts.length - 1].section = taperSection(mp, e, stations[k + 1][1], mirror, nat).outline;
+    else { pts[0].section = taperSection(tp, e, w0, mirror, nat).outline; pts[0]._w = w0; }
+    pts[pts.length - 1].section = taperSection(tp, e, stations[k + 1][1], mirror, nat).outline;
     pts[pts.length - 1]._w = stations[k + 1][1];
     // Points inside a stretch (where the main curve has a point of its own) take the width they fall at.
     for (let i = 0; i + 1 < pts.length; i++) {
@@ -1543,11 +1727,11 @@ function buildSlip(slip, object) {
       const along = nearestAlong(m, pts[i].position, d0, d1);
       const f = (along - d0) / (d1 - d0);
       pts[i]._w = w0 + (stations[k + 1][1] - w0) * f;
-      pts[i].section = taperSection(mp, e, pts[i]._w, mirror, nat).outline;
+      pts[i].section = taperSection(tp, e, pts[i]._w, mirror, nat).outline;
     }
     for (const q of pts) points.push(q);
   }
-  const { outline, roles } = taperSection(mp, e, width, mirror, nat);
+  const { outline, roles } = taperSection(tp, e, width, mirror, nat);
   const faces = {};
   roles.forEach((role, i) => {
     if (role === "grass") faces["band " + (i + 1)] = GRASS;
@@ -1574,11 +1758,32 @@ function buildSlip(slip, object) {
   const terrain = object.refs && object.refs.terrain ? object.refs.terrain.id : null;
   const cutKids = [];
   if (terrain) {
-    const cutPts = points.map((q, i) => ({ position: q.position, handle_in: q.handle_in, handle_out: q.handle_out, section: taperCut(mp, e, widths[i] != null ? widths[i] : width, mirror, nat) }));
+    // The cut runs on MOUTH_CUT metres past the mouth at full width, back along the main road. Ending square at
+    // the mouth, as the ramp's own cut does, it left a sliver of ground standing between the two (the main road
+    // and the ramp meet at a slight angle), and the ramp's blend pulled its deck up over it: a tarmac hump and a
+    // hooked edge line just before the mouth on Home Farm's On-ramp.
+    // Only with a ramp road: without one, nothing meets the mouth and the cut would notch the ground past it.
+    const mouthStart = (kind === "off-ramp") !== (travel > 0);   // the mouth is the taper's start
+    const over = ramp && ramp.components.curve ? MOUTH_CUT : 0;
+    const c0 = mouthStart ? Math.max(0, from - over) : from, c1 = mouthStart ? to : Math.min(m.total, to + over);
+    const wAt = (d) => {
+      if (d <= stations[0][0]) return stations[0][1];
+      for (let k = 0; k + 1 < stations.length; k++) {
+        const [a, wa] = stations[k], [b, wb] = stations[k + 1];
+        if (d <= b) return b - a > 0.01 ? wa + (wb - wa) * (d - a) / (b - a) : wb;
+      }
+      return stations[stations.length - 1][1];
+    };
+    const cutPts = [];
+    for (let a = c0; a < c1 - 0.01; a += 6) {
+      const pts = piece(m, a, Math.min(c1, a + 6));
+      if (cutPts.length) { cutPts[cutPts.length - 1].handle_out = pts[0].handle_out; pts.shift(); }
+      for (const q of pts) cutPts.push({ position: q.position, handle_in: q.handle_in, handle_out: q.handle_out, section: taperCut(tp, e, wAt(nearestAlong(m, q.position, c0, c1)), mirror, nat) });
+    }
     cutKids.push({
       name: "clear",
       components: {
-        world_shape: { shape: "Sweep", operation: "Subtract", outline: taperCut(mp, e, width, mirror, nat), follow: "Upright", rings: "Square", interval: 1, cuts: terrain, blend: CUT_BLEND },
+        world_shape: { shape: "Sweep", operation: "Subtract", outline: taperCut(tp, e, width, mirror, nat), follow: "Upright", rings: "Square", interval: 1, cuts: terrain, blend: CUT_BLEND },
         curve: { closed: false, points: cutPts },
       },
     });

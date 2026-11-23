@@ -327,9 +327,9 @@ const NOSE = 10;
 const RULE_CODES = { "give way": 1, stop: 2, lights: 3 };
 
 // A road's rule where it meets a junction, as the junction's rulesOf gives it, worked out from the
-// junction alone: its control, and whether this road is one of its priority roads. A build doesn't know
-// its own object's id yet (asked of Playweft); until it does, a road at a junction that names a priority
-// road can't tell whether it is that road, and draws no line ("priority").
+// junction alone: its control, and whether this road is one of its priority roads (the build's own
+// object.id, Playweft 4be3a3c0 on). Without an id (an older engine) a road at a junction that names a
+// priority road can't tell whether it is that road, and draws no line ("priority").
 function ruleFor(j, roadId) {
   const jn = j.components.junction;
   const control = controlOf(jn);

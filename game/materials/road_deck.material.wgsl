@@ -340,12 +340,12 @@ fn surface(s: SurfaceIn) -> Surface {
         * (1.0 - smoothstep(size.x - edge_soft, size.x, inside.x)) * (1.0 - smoothstep(size.y - edge_soft, size.y, inside.y));
     // Cracks: a few thin dark lines, only in the odd stretch.
     let crack_field = vnoise(s.world.xz * 0.9) + 0.5 * vnoise(s.world.xz * 2.3);
-    let crack = (1.0 - smoothstep(0.0, 0.012, abs(crack_field - 0.75))) * smoothstep(0.68, 0.78, vnoise(s.world.xz * 0.11 + 7.0));
+    let crack = (1.0 - smoothstep(0.0, 0.008, abs(crack_field - 0.75))) * smoothstep(0.72, 0.8, vnoise(s.world.xz * 0.11 + 7.0));
     let wear_k = params.wear;
     col *= 1.0 - polish * 0.06 * wear_k;
     col *= 1.0 - grime * 0.25 * wear_k;
     col = mix(col, params.base.rgb * 0.8, patched * 0.5 * wear_k);
-    col *= 1.0 - crack * 0.3 * wear_k;
+    col *= 1.0 - crack * 0.15 * wear_k;
 
     var paint = 0.0;           // white
     var ypaint = 0.0;          // yellow

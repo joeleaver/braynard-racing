@@ -55,7 +55,23 @@ const FACES = {
   "scenic:The Orchard Way": { m: "01M7GE3Q04EDN80KKD8PETKSFP", w: 4.0, h: 0.9 },
   "ring advance:EXIT 7|600 m|Mill River|Braynard Woods": { m: "01M7GE04ZBR3SYZNZ2ED5XJ2AD", w: 7.35, h: 3.0 },
   "ring gore:EXIT 7": { m: "01M7GE35X5DS2ZP3MX2DTAC1NG", w: 2.6, h: 1.3 },
+  // US (2026-11-22).
+  "yield": { m: "01M83AJBBNB30AJA15W89EH61M", w: 0.9, h: 0.7781 },
+  "diamond:bend left": { m: "01M83AJDBHQ09W4VK5CWGA09B6", w: 1.2, h: 1.2 },
+  "diamond:bend right": { m: "01M83AJEZ4YHFRXESTX5DP91S3", w: 1.2, h: 1.2 },
+  "diamond:cattle": { m: "01M83AJGWZ5XRMA5576D87JQVB", w: 1.2, h: 1.2 },
+  "diamond:junction ahead": { m: "01M83AJJK7D8BSTDMKFDRDSV3K", w: 1.2, h: 1.2 },
+  "diamond:signal ahead": { m: "01M83AJMG9Q37J443EQVYSJ6BV", w: 1.2, h: 1.2 },
+  "diamond:stop ahead": { m: "01M83AJPAN862VSDYKA0N2KC5N", w: 1.2, h: 1.2 },
+  "diamond:yield ahead": { m: "01M83AJR6NBHZJX872BFC9RRK4", w: 1.2, h: 1.2 },
+  "guide:Home Farm|¾|left;Braynard Town|½|right": { m: "01M83ARCDDC4XQP4VW8G7ZCZFT", w: 3.1344, h: 1.0188 },
+  "guide:Mill River|3|ahead;the Ring|¾|right": { m: "01M83AREDCQXV6R0JEY5Z6ZTGD", w: 2.4594, h: 1.0188 },
+  "guide:the Ring|¾|left;Orchard Hills|2¼|ahead;Braynard Town|½|right": { m: "01M83ARG6H77MBSBK6FKRD9FF3", w: 3.2938, h: 1.4187 },
 };
+
+// US signs (Joe, 2026-11-22: "American style markings, and we'd drive on the right"): the sign plan and
+// the road's own signs use the US families (stop, yield, warning diamonds, guide); the British ones
+// (give way, the triangle warnings, the fingerpost, plates) stay below for old scenes but nothing places them.
 
 // ---- Families: board colour, cap height, shape and where the board stands -----------------------
 // shape: rect (a Box), octagon, up (triangle point up), down (triangle point down), arm (pointed).
@@ -68,12 +84,15 @@ const FAMILIES = {
   "junction board": { colour: WHITE_POST, cap: 0.25, shape: "rect", bottom: 1.5, posts: 2, post: 0.16, thick: 0.08 },
   "fingerpost": { colour: WHITE_POST, cap: 0.15, shape: "arm", bottom: 2.0, posts: 1, post: 0.16, thick: 0.05 },
   "street": { colour: CREAM, cap: 0.13, shape: "rect", bottom: 0.9, posts: 2, post: 0.08, thick: 0.05 },
-  "warning": { colour: RED, cap: 0.13, shape: "up", bottom: 1.6, posts: 1, post: 0.1, thick: 0.05 },
+  "warning": { colour: HAY, cap: 0.13, shape: "diamond", bottom: 1.6, posts: 1, post: 0.1, thick: 0.05 },
   "stop": { colour: RED, cap: 0.18, shape: "octagon", bottom: 1.5, posts: 1, post: 0.1, thick: 0.05 },
   "give way": { colour: RED, cap: 0.13, shape: "down", bottom: 1.5, posts: 1, post: 0.1, thick: 0.05 },
   "scenic": { colour: BROWN, cap: 0.26, shape: "rect", bottom: 1.15, posts: 2, post: 0.16, thick: 0.08 },
   "course": { colour: HAY, cap: 0.36, shape: "rect", bottom: 1.2, posts: 2, post: 0.18, thick: 0.1 },
   "billboard": { colour: CREAM, cap: 0.8, shape: "rect", bottom: 3.0, posts: 3, post: 0.3, thick: 0.2 },
+  // US (added last, so saved choices keep their numbers).
+  "yield": { colour: RED, cap: 0.13, shape: "down", bottom: 1.5, posts: 1, post: 0.1, thick: 0.05 },
+  "guide": { colour: GREEN, cap: 0.2, shape: "rect", bottom: 2.1, posts: 2, post: 0.16, thick: 0.08 },
 };
 const FAMILY_NAMES = Object.keys(FAMILIES);
 const ARROWS = ["none", "up", "up right", "right", "down right", "down", "down left", "left", "up left"];
@@ -85,6 +104,7 @@ const OUTLINES = {
   octagon: [[-0.5 + K, -0.5], [0.5 - K, -0.5], [0.5, -0.5 + K], [0.5, 0.5 - K], [0.5 - K, 0.5], [-0.5 + K, 0.5], [-0.5, 0.5 - K], [-0.5, -0.5 + K]],
   up: [[0, -0.5], [0.5, 0.5], [-0.5, 0.5]],
   down: [[-0.5, -0.5], [0.5, -0.5], [0, 0.5]],
+  diamond: [[0, -0.5], [0.5, 0], [0, 0.5], [-0.5, 0]],
 };
 function armOutline(w, h, left) {
   const tip = 1 - (h * 0.55) / w;             // where the point starts, as a share of the length
@@ -99,8 +119,9 @@ const pick = (v, list) => (typeof v === "number" ? list[v] : v);
 // The face's key for a sign's values (one board; fingerpost arms have their own).
 function faceKey(s) {
   const f = s.family, l1 = s["line_1"] || "";
-  if (f === "stop" || f === "give way") return f;
-  if (f === "warning") return "warn:" + (s.picto || "");
+  if (f === "stop" || f === "give way" || f === "yield") return f;
+  if (f === "warning") return "diamond:" + (s.picto || "");
+  if (f === "guide") return "guide:" + [s["line_1"], s["line_2"], s["line_3"]].filter((t) => t).join(";");
   if (f === "street" || f === "course" || f === "scenic") return f + ":" + l1;
   if (f === "ring gore") return "ring gore:" + (s.tab || "");
   if (f === "ring advance") return "ring advance:" + [s.tab || "", s.distance || "", l1, s["line_2"] || ""].join("|");
@@ -113,6 +134,7 @@ function guessSize(s, fam) {
   if (fam.shape === "octagon") return [0.75, 0.75];
   if (fam.shape === "down") return [0.9, 0.7794];
   if (fam.shape === "up") return [1.2, 1.0392];
+  if (fam.shape === "diamond") return [1.2, 1.2];
   const lines = [s["line_1"], s["line_2"], s["line_3"]].filter((t) => t);
   const longest = Math.max(4, ...lines.map((t) => t.length));
   const w = longest * fam.cap * 0.62 + fam.cap * 2 + (s.tab || s.shield ? fam.cap * 3 : 0) + (s.arrow && s.arrow !== "none" ? fam.cap * 2.5 : 0);
@@ -348,12 +370,12 @@ const RULES = ["auto", "priority", "give way", "stop", "lights", "none"];
 const CONTROLS = ["priority", "stop", "all-way stop", "lights", "roundabout"];
 
 const PLAN_FIELDS = {
-  drive: pw.oneOf("left", "right", { doc: "Which side the county drives on; signs stand on the driver's side." }),
+  drive: pw.oneOf("right", "left", { doc: "Which side the county drives on; signs stand on the driver's side. Braynard drives on the right." }),
   mouth: pw.float(0, { unit: "m", range: [0, 100], doc: "How far from the centre the roads stop; 0 takes the junction's (12 if it has none)." }),
   line: pw.float(1, { unit: "m", range: [0, 20], doc: "How far out from the mouth the stop or give-way line is." }),
   control: pw.oneOf("junction's", ...CONTROLS, { doc: "Who goes; \"junction's\" reads the junction's own control field." }),
-  fingerpost: pw.onOff(true, { doc: "A fingerpost on the corner, one arm per road." }),
-  advance: pw.onOff(true, { doc: "\"Stop 100 m\" and \"Give way 50 m\" signs on fast roads." }),
+  fingerpost: pw.onOff(true, { doc: "A guide sign on the approach (green, one line per road, with arrows), US style. (Named for the British fingerpost it replaced.)" }),
+  advance: pw.onOff(true, { doc: "Warning diamonds ahead of the junction on fast roads: Stop ahead, Yield ahead, Signal ahead." }),
 };
 for (let i = 1; i <= 6; i++) {
   const g = "Arm " + i;
@@ -368,7 +390,7 @@ for (let i = 1; i <= 6; i++) {
 // The junction's signs: a stop or give-way sign at each minor arm's line (with an advance sign on a
 // fast road), and a fingerpost on a corner. It stands on the junction object, at the junction's centre.
 function planJunction(values, object) {
-  const plan = Object.assign({}, values, { drive: pick(values.drive, ["left", "right"]), control: pick(values.control, ["junction's", ...CONTROLS]) });
+  const plan = Object.assign({}, values, { drive: pick(values.drive, ["right", "left"]) || "right", control: pick(values.control, ["junction's", ...CONTROLS]) });
   for (let i = 1; i <= 6; i++) plan["rule_" + i] = pick(values["rule_" + i], RULES);
   const out = [], missing = [];
   const j = object.components.junction || {};
@@ -402,66 +424,65 @@ function planJunction(values, object) {
       else rule = through.includes(a.id) ? "priority" : (control === "stop" ? "stop" : "give way");
     }
     a.rule = rule;
-    if (rule !== "stop" && rule !== "give way") continue;
     const [hw, verge] = edgeOf(a.road);
-    const toward = [-a.out[0], -a.out[1]];               // the way its traffic drives in
-    const side = plan.drive === "right" ? leftOf(toward).map((v) => -v) : leftOf(toward);
     const off = hw + verge * 0.7;
-    const yaw = facing(toward, plan.drive);
-    // At the line: `line` metres out from the mouth, along the road.
     const lineAt = a.at + a.sign * plan.line;
-    const p = a.path.at(Math.max(0, Math.min(a.path.length, lineAt))).position;
-    missing.push(...placeSign(out, "arm " + a.n + " " + rule, { family: rule }, [p[0] + side[0] * off, p[1], p[2] + side[1] * off], yaw));
-    // The advance sign on a fast road, if the road runs that far out.
-    const ahead = rule === "stop" ? 100 : 50;
-    const advAt = lineAt + a.sign * ahead;
-    if (plan.advance && fastRoad(a.road) && advAt > 0 && advAt < a.path.length) {
+    // The warning diamond ahead on a fast road (US): Stop ahead, Yield ahead, Signal ahead.
+    const warn = rule === "stop" ? "stop ahead" : rule === "give way" ? "yield ahead" : rule === "lights" ? "signal ahead" : "";
+    const advAt = lineAt + a.sign * 60;
+    if (warn && plan.advance && fastRoad(a.road) && advAt > 0 && advAt < a.path.length) {
       const f = a.path.at(advAt);
       const tw = norm2(-f.along[0] * a.sign, -f.along[2] * a.sign);
       const sd = plan.drive === "right" ? leftOf(tw).map((v) => -v) : leftOf(tw);
       const q = f.position;
-      missing.push(...placeSign(out, "arm " + a.n + " " + rule + " ahead", { family: rule, plate: (rule === "stop" ? "Stop " : "Give way ") + ahead + " m" },
+      missing.push(...placeSign(out, "arm " + a.n + " " + warn.replace(/ /g, "-"), { family: "warning", picto: warn },
         [q[0] + sd[0] * off, q[1], q[2] + sd[1] * off], facing(tw, plan.drive)));
     }
+    if (rule !== "stop" && rule !== "give way") continue;
+    const toward = [-a.out[0], -a.out[1]];               // the way its traffic drives in
+    const side = plan.drive === "right" ? leftOf(toward).map((v) => -v) : leftOf(toward);
+    const yaw = facing(toward, plan.drive);
+    // At the line: `line` metres out from the mouth, along the road. A US yield, not a British give way.
+    const p = a.path.at(Math.max(0, Math.min(a.path.length, lineAt))).position;
+    const family = rule === "give way" ? "yield" : "stop";
+    missing.push(...placeSign(out, "arm " + a.n + " " + family, { family }, [p[0] + side[0] * off, p[1], p[2] + side[1] * off], yaw));
   }
 
-  // The fingerpost: on the corner the first minor arm's traffic sees on its own side (or arm 1's),
-  // facing that traffic, one arm per arm of the junction that names a place.
+  // The guide sign (US): on the approach of the first minor arm (or arm 1), on its traffic's side, 30 m
+  // before the line, facing that traffic: one line per other road that names a place, with an arrow
+  // for the way it turns (left, ahead or right) and its distance.
   // A road running through has two arms: "place N" names where it leads towards its curve's end, and
   // "place N start" towards its start. A road with one arm here takes "place N" whichever way it runs.
   const one = (a) => arms.filter((b) => b.index === a.index).length === 1;
   const placeOf = (a) => (a.sign > 0 || one(a) ? plan["place_" + a.index] : plan["place_" + a.index + "_start"]) || "";
   const distOf = (a) => (a.sign > 0 || one(a) ? plan["distance_" + a.index] : plan["distance_" + a.index + "_start"]) || "";
-  const named = arms.filter((a) => placeOf(a));
-  if (plan.fingerpost && named.length >= 2) {
-    const reader = arms.find((a) => a.rule === "stop" || a.rule === "give way") || arms[0];
+  const reader = arms.find((a) => a.rule === "stop" || a.rule === "give way") || arms[0];
+  if (plan.fingerpost && reader) {
     const toward = [-reader.out[0], -reader.out[1]];
-    const sideDir = plan.drive === "right" ? leftOf(toward).map((v) => -v) : leftOf(toward);
-    // The neighbouring arm on that side: the corner between them.
-    let best = null, bestDot = -2;
+    const lines = [];
     for (const b of arms) {
-      if (b === reader) continue;
-      const d = b.out[0] * sideDir[0] + b.out[1] * sideDir[1];
-      if (d > bestDot) { bestDot = d; best = b; }
+      if (b === reader || !placeOf(b)) continue;
+      // The turn from driving in along `toward` to leaving along b.out: positive is to the right.
+      const right = [-toward[1], toward[0]];
+      const turn = Math.atan2(b.out[0] * right[0] + b.out[1] * right[1], b.out[0] * toward[0] + b.out[1] * toward[1]) / DEG;
+      const way = Math.abs(turn) < 35 ? "ahead" : turn > 0 ? "right" : "left";
+      lines.push({ turn, text: placeOf(b) + "|" + distOf(b) + "|" + way });
     }
-    const [hw, verge] = edgeOf(reader.road);
-    const [hw2, verge2] = best ? edgeOf(best.road) : [hw, verge];
-    const bis = best ? norm2(reader.out[0] + best.out[0], reader.out[1] + best.out[1]) : sideDir;
-    const half = best ? Math.acos(Math.max(-1, Math.min(1, reader.out[0] * best.out[0] + reader.out[1] * best.out[1]))) / 2 : Math.PI / 2;
-    const clear = Math.max(hw + verge, hw2 + verge2) + 1;
-    const r = Math.min(mouth + 6, clear / Math.max(0.2, Math.sin(half)));
-    const y = reader.position[1];
-    const yaw = yawOf([-toward[0], -toward[1]]);
-    const values = { family: "fingerpost" };
-    named.slice(0, 4).forEach((a, k) => {
-      values["arm_" + (k + 1)] = placeOf(a);
-      values["arm_" + (k + 1) + "_distance"] = distOf(a);
-      // The arm's heading in the post's own frame (0 right, 90 ahead, counter-clockwise from above):
-      // heading h points along (cos h, -sin h) in x and z, and the post is turned by yaw about y, which
-      // turns every heading by the same yaw, so a world heading H is H - yaw in its frame.
-      values["arm_" + (k + 1) + "_heading"] = r4(a.heading / DEG - yaw);
-    });
-    missing.push(...placeSign(out, "fingerpost", values, [bis[0] * r, y, bis[1] * r], yaw));
+    lines.sort((p, q) => p.turn - q.turn);                // left first, then ahead, then right
+    if (lines.length) {
+      const at = reader.at + reader.sign * (plan.line + 30);
+      if (at > 0 && at < reader.path.length) {
+        const f = reader.path.at(at);
+        const tw = norm2(-f.along[0] * reader.sign, -f.along[2] * reader.sign);
+        const sd = plan.drive === "right" ? leftOf(tw).map((v) => -v) : leftOf(tw);
+        const [hw, verge] = edgeOf(reader.road);
+        const off = hw + verge + 1.6;
+        const q = f.position;
+        const values = { family: "guide" };
+        lines.slice(0, 3).forEach((l, k) => { values["line_" + (k + 1)] = l.text; });
+        missing.push(...placeSign(out, "guide", values, [q[0] + sd[0] * off, q[1], q[2] + sd[1] * off], facing(tw, plan.drive)));
+      }
+    }
   }
   return { children: out, missing, arms };
 }
@@ -475,7 +496,7 @@ pw.defineComponent("sign_plan", PLAN_FIELDS, {
 // ---- A road's own signs: warnings before its tight bends and its hazards, both ways ---------------
 const HAZARDS = ["none", "ford", "cattle", "cattle grid", "humpback bridge", "tractors", "ducks crossing"];
 const ROAD_SIGN_FIELDS = {
-  drive: pw.oneOf("left", "right", { doc: "Which side the county drives on." }),
+  drive: pw.oneOf("right", "left", { doc: "Which side the county drives on. Braynard drives on the right." }),
   speed: pw.float(16, { unit: "m/s", range: [1, 60], doc: "The road's speed: lanes 16, the Ring 33. Sets how tight a bend earns a warning, and how far ahead it goes." }),
   grip: pw.float(3.5, { unit: "m/s²", range: [0.5, 10], doc: "The sideways pull a bend at speed may ask for before it's warned: a bend of radius under speed² / grip." }),
   ahead: pw.float(6, { unit: "s", range: [1, 15], doc: "How many seconds at speed before the hazard its warning stands (5–7 on lanes)." }),
@@ -508,7 +529,7 @@ function tightBends(path, limit) {
 }
 
 function planRoad(values, object) {
-  const rs = Object.assign({}, values, { drive: pick(values.drive, ["left", "right"]) });
+  const rs = Object.assign({}, values, { drive: pick(values.drive, ["right", "left"]) || "right" });
   for (let i = 1; i <= 3; i++) rs["hazard_" + i] = pick(values["hazard_" + i], HAZARDS);
   const out = [], missing = [];
   const curve = object.components.curve;

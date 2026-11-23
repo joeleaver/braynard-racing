@@ -38,6 +38,10 @@ SIGNAL_RED = (200, 53, 43)
 SCENIC_BROWN = (107, 62, 38)
 HAY = (242, 194, 48)
 EVENT_RED = (184, 38, 30)
+# US signs (Joe, 2026-11-22: "American style markings, and we'd drive on the right"), MUTCD colours.
+US_RED = (191, 23, 42)
+US_YELLOW = (255, 204, 0)
+US_GREEN = (0, 112, 60)
 
 CAP = {"lato": 0.718, "lilita": 0.70}  # cap height as a share of the em
 
@@ -326,7 +330,112 @@ def give_way_sign(side=0.9):
     return img
 
 
+def yield_sign(side=0.9):
+    """US Yield: a triangle pointing down, a broad red border, a white centre with YIELD in red."""
+    hgt = side * math.sqrt(3) / 2
+    img, d = canvas(side, hgt)
+    tri = [(0, 0), (side, 0), (side / 2, hgt)]
+    d.polygon([(m(x), m(y)) for x, y in tri], fill=US_RED)
+    c = (side / 2, hgt / 3)
+    k = 0.56
+    d.polygon([(m(c[0] + (x - c[0]) * k), m(c[1] + (y - c[1]) * k)) for x, y in tri], fill=WHITE)
+    f = font("lato", side * 0.075)
+    while width_m("YIELD", f) > side * 0.34:
+        f = font("lato", f.size / PX * CAP["lato"] * 0.95)
+    text_at(d, (side / 2, hgt * 0.33), "YIELD", f, US_RED, anchor="mm")
+    return img
+
+
+def warning_diamond(picto, width=1.2):
+    """A US warning sign: a yellow diamond (a square on its point) with a thin black edge and a black
+    pictogram, fitted inside the yellow field."""
+    w = width
+    img, d = canvas(w, w)
+    dia = [(w / 2, 0), (w, w / 2), (w / 2, w), (0, w / 2)]
+    d.polygon([(m(x), m(y)) for x, y in dia], fill=INK)
+    d.polygon([(m(x), m(y)) for x, y in inset(dia, w * 0.025)], fill=US_YELLOW)
+    d.line([(m(x), m(y)) for x, y in inset(dia, w * 0.045) + inset(dia, w * 0.045)[:1]], fill=INK, width=m(w * 0.012))
+    layer, ld = canvas(w, w)
+    picto(ld, w, w)
+    box = layer.getbbox()
+    if box:
+        layer = layer.crop(box)
+        fit = w * 0.46                           # the picture's diagonal fits the diamond's middle
+        diag = math.hypot(layer.width, layer.height) / PX
+        sc = fit / diag
+        layer = layer.resize((max(1, round(layer.width * sc)), max(1, round(layer.height * sc))), Image.LANCZOS)
+        img.alpha_composite(layer, (round(m(w / 2) - layer.width / 2), round(m(w / 2) - layer.height / 2)))
+    return img
+
+
+def picto_junction(d, side, hgt):
+    """A crossroads ahead: a broad plus."""
+    cx, cy, s = side / 2, hgt / 2, side * 0.3
+    t = side * 0.07
+    d.rectangle((m(cx - t), m(cy - s), m(cx + t), m(cy + s)), fill=INK)
+    d.rectangle((m(cx - s * 0.8), m(cy - t), m(cx + s * 0.8), m(cy + t)), fill=INK)
+
+
+def picto_signal(d, side, hgt):
+    """A traffic signal ahead: a black head with red, yellow and green lamps."""
+    cx, cy = side / 2, hgt / 2
+    w, h = side * 0.16, side * 0.42
+    d.rounded_rectangle((m(cx - w / 2), m(cy - h / 2), m(cx + w / 2), m(cy + h / 2)), radius=m(side * 0.03), fill=INK)
+    for k, col in enumerate([US_RED, US_YELLOW, (0, 150, 70)]):
+        y = cy - h / 2 + h * (k + 0.5) / 3
+        r = w * 0.32
+        d.ellipse((m(cx - r), m(y - r), m(cx + r), m(y + r)), fill=col)
+
+
+def picto_stop_ahead(d, side, hgt):
+    """Stop ahead: a red octagon above an arrow pointing up."""
+    cx, cy = side / 2, hgt / 2
+    o = side * 0.22
+    pts = [(cx - o / 2 + x, cy - side * 0.2 + y) for x, y in octagon_pts(o)]
+    d.polygon([(m(x), m(y)) for x, y in pts], fill=US_RED)
+    arrow(d, cx, cy + side * 0.15, side * 0.24, 0, INK)
+
+
+def picto_yield_ahead(d, side, hgt):
+    """Yield ahead: a red-edged triangle pointing down above an arrow pointing up."""
+    cx, cy = side / 2, hgt / 2
+    w = side * 0.26
+    h = w * math.sqrt(3) / 2
+    top = cy - side * 0.2
+    tri = [(cx - w / 2, top), (cx + w / 2, top), (cx, top + h)]
+    d.polygon([(m(x), m(y)) for x, y in tri], fill=US_RED)
+    c = (cx, top + h / 3)
+    d.polygon([(m(c[0] + (x - c[0]) * 0.5), m(c[1] + (y - c[1]) * 0.5)) for x, y in tri], fill=WHITE)
+    arrow(d, cx, cy + side * 0.15, side * 0.24, 0, INK)
+
+
+GUIDE_ARROWS = {"left": -90, "ahead": 0, "right": 90}
+
+
+def guide_sign(lines, cap=0.2):
+    """A US guide sign at a junction: green, a white edge, one line per destination, each with its
+    arrow (left, ahead or right), its name and its distance, in white."""
+    f = font("lato", cap)
+    gap = cap * 1.0
+    a = cap * 1.4                                # the arrow's length
+    name_w = max(width_m(p, f) for p, _, _ in lines)
+    dist_w = max([width_m(dd, f) for _, dd, _ in lines] + [0])
+    w = 0.12 + a + gap + name_w + gap * 1.4 + dist_w + 0.18
+    row = cap * 2.0
+    h = 0.12 + row * len(lines) + 0.1
+    img, d = canvas(w, h)
+    rounded_board(d, w, h, US_GREEN, WHITE, cap * 0.18, cap * 0.22, cap * 0.5)
+    for i, (place, dist, way) in enumerate(lines):
+        cy = 0.12 + row * (i + 0.5) + 0.02
+        arrow(d, 0.12 + a / 2 + 0.04, cy, a * 0.8, GUIDE_ARROWS.get(way, 0), WHITE)
+        text_at(d, (0.12 + a + gap, cy), place, f, WHITE, anchor="lm")
+        if dist:
+            text_at(d, (w - 0.18, cy), dist, f, WHITE, anchor="rm")
+    return img
+
+
 # ---- faces by key: the road_sign builder names each face it wants by a key ------------------------
+# US (2026-11-22): "yield", "diamond:<pictogram>", "guide:<place>|<distance>|<left|ahead|right>;…".
 # "stop", "give way", "plate:<words>", "warn:<pictogram>", "finger:<place>|<distance>|left|right",
 # "street:<name>", "course:<name>", "scenic:<name>". Its table of baked faces (road_sign.ts, FACES)
 # holds each key's material and size, which `--table` prints.
@@ -337,7 +446,9 @@ def picto_bend_left(d, side, hgt):
     d._image.alpha_composite(layer.transpose(Image.FLIP_LEFT_RIGHT))
 
 
-PICTOS = {"bend right": picto_bend_right, "bend left": picto_bend_left, "ford": picto_ford, "cattle": picto_cattle}
+PICTOS = {"bend right": picto_bend_right, "bend left": picto_bend_left, "ford": picto_ford, "cattle": picto_cattle,
+          "junction ahead": picto_junction, "signal ahead": picto_signal, "stop ahead": picto_stop_ahead,
+          "yield ahead": picto_yield_ahead}
 
 
 def face_for_key(key):
@@ -346,6 +457,13 @@ def face_for_key(key):
         return stop_sign()
     if kind == "give way":
         return give_way_sign()
+    if kind == "yield":
+        return yield_sign()
+    if kind == "diamond":
+        return warning_diamond(PICTOS[rest])
+    if kind == "guide":
+        # guide:<place>|<distance>|<left|ahead|right>;<place>|…
+        return guide_sign([tuple((part.split("|") + ["", ""])[:3]) for part in rest.split(";") if part])
     if kind == "plate":
         f = font("lato", 0.13)
         return plate(rest, w=max(1.0, round(width_m(rest, f) + 0.3, 2)))

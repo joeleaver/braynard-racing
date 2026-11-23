@@ -71,7 +71,13 @@ pw.registerSystem("signals", { includeComponents: ["road_node"] }, ({ objects })
   }
 });
 
+// Arms never move while the game runs, so the lines are read once, and again only when the arms change
+// (a junction rebuilt in the editor, a scene with other junctions): an arm added, or one gone.
+let armsSeen = -1;
 pw.registerSystem("stop lines", { includeComponents: ["road_arm", "curve"] }, ({ objects }) => {
+  const added = objects.added.length;
+  if (added === 0 && objects.count === armsSeen) return;
+  armsSeen = objects.count;
   stopLines.length = 0;
   for (const o of objects) {
     const curve = o.curve;

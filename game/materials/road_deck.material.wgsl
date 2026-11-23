@@ -27,7 +27,7 @@ param rough: f32 = 0.88 range(0, 1);
 // Where a span meets a junction, its own values (components/road.ts writes them on that span, Playweft
 // material values) draw the line across the way in. `_a` is the span's start end, `_b` its end end:
 // stop: how far along the span (u) the line is, 0 for none; rule: 1 give way (a double dashed line),
-// 2 stop (one wide solid line), 3 lights (one solid line); warn: over this many metres before the line
+// 2 stop (one solid line 0.45 m wide), 3 lights (one solid line 0.2 m wide); warn: over this many metres before the line
 // the centre line turns to long warning dashes. Braynard drives on the left, so the line crosses the half
 // the traffic comes in on: at the start end that's the +across side, at the end end the -across side.
 param stop_a: f32 = 0.0 range(0, 10000);
@@ -36,6 +36,24 @@ param warn_a: f32 = 0.0 range(0, 100);
 param stop_b: f32 = 0.0 range(0, 10000);
 param rule_b: f32 = 0.0 range(0, 3);
 param warn_b: f32 = 0.0 range(0, 100);
+// A junction's pad (role 1) or a roundabout's (role 2), written by components/road.ts's junction builder,
+// in the pad's own space (its texture's u and v are metres there): each mouth as [x, z, heading (radians,
+// the way out along its arm), half-width]; with a priority road, through_1/2 name the two arms it runs
+// between [i, j] and through_w/through_d say how it's marked [lanes out, line width, edge width, centre
+// (1 dashed, 2 solid)] and [dash, period]; a roundabout's ring is [island radius, outer radius].
+param role: f32 = 0.0 range(0, 2);
+param arms: f32 = 0.0 range(0, 6);
+param mouth_1: vec4f = (0.0, 0.0, 0.0, 0.0);
+param mouth_2: vec4f = (0.0, 0.0, 0.0, 0.0);
+param mouth_3: vec4f = (0.0, 0.0, 0.0, 0.0);
+param mouth_4: vec4f = (0.0, 0.0, 0.0, 0.0);
+param mouth_5: vec4f = (0.0, 0.0, 0.0, 0.0);
+param mouth_6: vec4f = (0.0, 0.0, 0.0, 0.0);
+param through_1: vec4f = (0.0, 0.0, 0.0, 0.0);
+param through_2: vec4f = (0.0, 0.0, 0.0, 0.0);
+param through_w: vec4f = (4.0, 0.12, 0.15, 1.0);
+param through_d: vec4f = (4.0, 12.0, 0.0, 0.0);
+param ring: vec4f = (0.0, 0.0, 0.0, 0.0);
 
 fn hash2(p: vec2<f32>) -> f32 {
     let q = fract(p * vec2<f32>(0.1031, 0.1030));
@@ -70,8 +88,104 @@ fn way_in(d: f32, side: f32, out: f32, rule: f32, aa: f32) -> f32 {
         let dashes = dashed(side, 0.6, 0.9, aa);
         return max(stroke(d - 0.15, 0.1, aa), stroke(d - 0.55, 0.1, aa)) * dashes;
     }
-    if rule < 2.5 { return stroke(d - 0.15, 0.15, aa); }      // stop
+    if rule < 2.5 { return stroke(d - 0.225, 0.225, aa); }    // stop: 0.45 m, to read apart from lights
     return stroke(d - 0.1, 0.1, aa);                            // lights
+}
+
+fn mouth_of(k: i32) -> vec4<f32> {
+    switch k {
+        case 1: { return params.mouth_1; }
+        case 2: { return params.mouth_2; }
+        case 3: { return params.mouth_3; }
+        case 4: { return params.mouth_4; }
+        case 5: { return params.mouth_5; }
+        default: { return params.mouth_6; }
+    }
+}
+
+// The priority road carried across a pad, from mouth i to mouth j as a curve leaving each mouth along its
+// arm: the paint of its centre line and edge lines at `p`, the edges broken where a side road joins.
+fn through(p: vec2<f32>, pair: vec4<f32>, aa: f32) -> f32 {
+    let i = i32(pair.x + 0.5);
+    let j = i32(pair.y + 0.5);
+    if i < 1 || j < 1 { return 0.0; }
+    let mi = mouth_of(i);
+    let mj = mouth_of(j);
+    let ui = vec2<f32>(cos(mi.z), sin(mi.z));
+    let uj = vec2<f32>(cos(mj.z), sin(mj.z));
+    let reach = distance(mi.xy, mj.xy) * 0.4;
+    let c0 = mi.xy;
+    let c1 = mi.xy - ui * reach;
+    let c2 = mj.xy - uj * reach;
+    let c3 = mj.xy;
+    // The nearest point on the curve, in 16 straight pieces: how far off (signed) and how far along.
+    var best = 1e9;
+    var side = 0.0;
+    var along = 0.0;
+    var run = 0.0;
+    var prev = c0;
+    for (var n = 1; n <= 16; n = n + 1) {
+        let t = f32(n) / 16.0;
+        let v = 1.0 - t;
+        let q = c0 * (v * v * v) + c1 * (3.0 * v * v * t) + c2 * (3.0 * v * t * t) + c3 * (t * t * t);
+        let seg = q - prev;
+        let len = max(length(seg), 1e-4);
+        let f = clamp(dot(p - prev, seg) / (len * len), 0.0, 1.0);
+        let near = prev + seg * f;
+        let d = distance(p, near);
+        if d < best {
+            best = d;
+            side = sign(seg.x * (p.y - prev.y) - seg.y * (p.x - prev.x)) * d;
+            along = run + len * f;
+        }
+        run = run + len;
+        prev = q;
+    }
+    var paint = 0.0;
+    let lines = params.through_w;
+    if lines.w >= 1.5 {
+        paint = stroke(side, lines.y * 0.5, aa);
+    } else if lines.w >= 0.5 {
+        paint = stroke(side, lines.y * 0.5, aa) * dashed(along, params.through_d.x, params.through_d.y, aa);
+    }
+    if lines.z > 0.0 {
+        var edge = stroke(abs(side) - lines.x, lines.z * 0.5, aa);
+        // Broken where a side road comes in: inside another arm's corridor.
+        let count = i32(params.arms + 0.5);
+        for (var k = 1; k <= count; k = k + 1) {
+            if k == i || k == j { continue; }
+            let mk = mouth_of(k);
+            let uk = vec2<f32>(cos(mk.z), sin(mk.z));
+            let lk = vec2<f32>(-uk.y, uk.x);
+            let rel = p - mk.xy;
+            if abs(dot(rel, lk)) < mk.w + 0.5 && dot(rel, uk) < 0.0 {
+                edge = edge * dashed(along, 1.0, 2.0, aa);
+            }
+        }
+        paint = max(paint, edge);
+    }
+    return paint;
+}
+
+// A roundabout's markings: a dashed give-way line round the ring's outer edge across each way in (the
+// half the traffic comes in on).
+fn roundabout(p: vec2<f32>, aa: f32) -> f32 {
+    let outer = params.ring.y;
+    if outer <= 0.0 { return 0.0; }
+    let r = length(p);
+    let count = i32(params.arms + 0.5);
+    var paint = 0.0;
+    for (var k = 1; k <= count; k = k + 1) {
+        let mk = mouth_of(k);
+        let uk = vec2<f32>(cos(mk.z), sin(mk.z));
+        let lk = vec2<f32>(-uk.y, uk.x);
+        let s = dot(p, lk);
+        if dot(p, uk) > 0.0 && s > 0.0 && s < mk.w + 1.0 {
+            let lines = max(stroke(r - outer - 0.15, 0.1, aa), stroke(r - outer - 0.55, 0.1, aa));
+            paint = max(paint, lines * dashed(s, 0.6, 0.9, aa));
+        }
+    }
+    return paint;
 }
 
 // Diagonal stripes, `spacing` apart, about a third of it wide.
@@ -122,6 +236,17 @@ fn surface(s: SurfaceIn) -> Surface {
         paint = max(paint, stroke(side - lanes_out, params.edge_width * 0.5, aa));
         if params.hatch > 0.0 && side > lanes_out + params.edge_width && side < params.half_width - 0.2 {
             paint = max(paint, hatched(along, side, params.hatch, aa));
+        }
+    }
+
+    // A junction's pad: the priority road carried through; a roundabout's: its give-way lines.
+    if params.role > 0.5 {
+        let p = s.uv;
+        if params.role < 1.5 {
+            paint = max(paint, through(p, params.through_1, aa));
+            paint = max(paint, through(p, params.through_2, aa));
+        } else {
+            paint = max(paint, roundabout(p, aa));
         }
     }
 

@@ -333,7 +333,8 @@ function ruleFor(j, object) {
   const control = controlOf(jn);
   if (control === "lights") return "lights";
   if (control === "all-way stop") return "stop";
-  if (control === "roundabout") return "give way";
+  // A roundabout's give-way line is drawn by its pad, round the ring; the road draws none.
+  if (control === "roundabout") return "priority";
   const minor = control === "stop" ? "stop" : "give way";
   const pri = [jn.priority, jn.priority_2].filter(Boolean);
   if (!pri.length) return minor;
@@ -366,6 +367,45 @@ function linesOn(mouths, d0, d1) {
     }
   }
   return Object.keys(v).length ? v : null;
+}
+
+// How each profile's deck is marked, as its material says (assets "Road deck: …"), for carrying a
+// priority road's lines across a pad: [lanes out, line width, edge width, centre (1 dashed, 2 solid)],
+// [dash, period].
+const MARKS = {
+  "two-lane": [[3.5, 0.12, 0.15, 1], [4, 12]],
+  "back lane": [[3, 0.1, 0.12, 1], [3, 12]],
+  "slip road": [[2.5, 0.12, 0.15, 0], [4, 12]],
+  "freeway": [[15, 0.15, 0.2, 0], [4, 9]],
+};
+
+// A pad's material values (materials/road_deck.material.wgsl, role 1 or 2): its mouths in its own space,
+// and the priority road's way through, or a roundabout's ring.
+function padMarks(arms, rules, pad, round, junction) {
+  const r3 = (v) => Math.round(v * 1000) / 1000;
+  const v = { role: round ? 2 : 1, arms: Math.min(6, arms.length) };
+  arms.slice(0, 6).forEach((arm, i) => {
+    const a = pad.local(arm.p), b = pad.local(add(arm.p, arm.u));
+    v["mouth_" + (i + 1)] = [r3(a[0]), r3(a[2]), r3(Math.atan2(b[2] - a[2], b[0] - a[0])), r3(arm.half)];
+  });
+  if (round) {
+    const island = junction.island > 0 ? junction.island : 8;
+    v.ring = [island, island + (junction.ring > 0 ? junction.ring : 8), 0, 0];
+    return v;
+  }
+  // The priority road runs through between its two arms (a road's two arms share its id).
+  const byRoad = {};
+  rules.forEach((r, i) => { if (r.rule === "priority" && i < 6) (byRoad[arms[i].id] = byRoad[arms[i].id] || []).push(i + 1); });
+  let n = 0;
+  for (const id of Object.keys(byRoad)) {
+    const ends = byRoad[id];
+    if (ends.length < 2 || n >= 2) continue;
+    n++;
+    v["through_" + n] = [ends[0], ends[1], 0, 0];
+    const marks = MARKS[arms[ends[0] - 1].profile] || MARKS["two-lane"];
+    if (n === 1) { v.through_w = marks[0]; v.through_d = marks[1]; }
+  }
+  return v;
 }
 
 // The whole natural cross-section: a crowned deck, edge strips, rolled shoulders and banks. `level`
@@ -909,6 +949,8 @@ function onPlane(ring, top, b, c, depth) {
     position: sub(O, scaled(N, depth / 2)).map((x) => Math.round(x * 10000) / 10000),
     rotation: [rx * 180 / Math.PI, 0, rz * 180 / Math.PI].map((x) => Math.round(x * 10000) / 10000),
     outline: extrudeOutline(pts, [0, 0, 0]),
+    // A point of the junction's space (on the plane) into the shape's own space, for its material values.
+    local: (P) => local([P[0], top + b * P[0] + c * P[2], P[2]]),
   };
 }
 
@@ -1206,7 +1248,7 @@ function buildJunction(junction, object) {
   for (let w = 1; w <= pad.outline.length; w++) padFaces["wall " + w] = GRASS;
   const padShape = { shape: "Extrude", outline: pad.outline, faces: padFaces, blend: junction.blend };
   if (ground) padShape[JOINS] = ground;
-  children.push({ name: "pad", position: pad.position, rotation: pad.rotation, scale: [1, depth, 1], components: { world_shape: padShape, material: { asset: PLAIN } } });
+  children.push({ name: "pad", position: pad.position, rotation: pad.rotation, scale: [1, depth, 1], components: { world_shape: padShape, material: { asset: PLAIN }, material_values: padMarks(arms, rules, pad, round, junction) } });
   // The verge ring: the same outline widened by the verge, a step below the deck, all grass. Inside the
   // pad the pad's deck stands above it; beyond, it meets each road's verge at the same height, and it
   // melts into the ground below by `verge_blend`, as a road's banks do.

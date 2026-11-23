@@ -322,13 +322,15 @@ function shoulderOut(n, x0, y0, cf, depth) {
 
 // How far before a junction's line the centre line turns to long warning dashes.
 const WARN = 30;
+// How far a splitter island's hatching runs on from its point.
+const NOSE = 10;
 const RULE_CODES = { "give way": 1, stop: 2, lights: 3 };
 
 // A road's rule where it meets a junction, as the junction's rulesOf gives it, worked out from the
 // junction alone: its control, and whether this road is one of its priority roads. A build doesn't know
 // its own object's id yet (asked of Playweft); until it does, a road at a junction that names a priority
 // road can't tell whether it is that road, and draws no line ("priority").
-function ruleFor(j, object) {
+function ruleFor(j, roadId) {
   const jn = j.components.junction;
   const control = controlOf(jn);
   if (control === "lights") return "lights";
@@ -338,8 +340,8 @@ function ruleFor(j, object) {
   const minor = control === "stop" ? "stop" : "give way";
   const pri = [jn.priority, jn.priority_2].filter(Boolean);
   if (!pri.length) return minor;
-  if (object.id === undefined) return "priority";
-  return pri.includes(object.id) ? "priority" : minor;
+  if (roadId === undefined) return "priority";
+  return pri.includes(roadId) ? "priority" : minor;
 }
 
 // The material values that draw the lines across the way in on a span from d0 to d1 (and the warning
@@ -347,7 +349,12 @@ function ruleFor(j, object) {
 // its line at the span's end side (_b); toward smaller d, at its start side (_a).
 function linesOn(mouths, d0, d1) {
   const v = {};
+  const r3 = (x) => Math.round(x * 1000) / 1000;
   for (const mo of mouths) {
+    // Hatching on from a roundabout splitter's point, away from the junction.
+    if (mo.nose > 0 && mo.point > d0 - NOSE && mo.point < d1 + NOSE) {
+      v[mo.toward > 0 ? "nose_b" : "nose_a"] = [r3(mo.point - d0), mo.toward > 0 ? -NOSE : NOSE, r3(mo.nose), 0];
+    }
     const code = RULE_CODES[mo.rule] || 0;
     if (!code) continue;
     if (mo.toward > 0) {
@@ -495,11 +502,14 @@ pw.defineComponent("road", {
       const j = object.refs && object.refs[field];
       if (!j || !j.components.junction) continue;
       const centre = [j.matrix[9], j.matrix[10], j.matrix[11]];
-      const rule = ruleFor(j, object);
+      const rule = ruleFor(j, object.id);
+      // A roundabout's splitter island reaches 4 m out onto the road, ending in a point (buildJunction).
+      const round = pick(j.components.junction.kind, ["crossroads", "roundabout"]) === "roundabout";
+      const nose = round ? Math.min(1.6, (p.deck + p.kerb) * 0.45) : 0;
       for (const g of within(path, centre, mouthOf(j.components.junction))) {
         gaps.push(g);
-        if (g[0] > 0.01) mouths.push({ at: g[0] - STOP_OUT, toward: 1, rule });
-        if (g[1] < m.total - 0.01) mouths.push({ at: g[1] + STOP_OUT, toward: -1, rule });
+        if (g[0] > 0.01) mouths.push({ at: g[0] - STOP_OUT, toward: 1, rule, nose, point: g[0] - 4 });
+        if (g[1] < m.total - 0.01) mouths.push({ at: g[1] + STOP_OUT, toward: -1, rule, nose, point: g[1] + 4 });
       }
     }
     const terrain = object.refs && object.refs.terrain ? object.refs.terrain.id : null;
@@ -1506,7 +1516,16 @@ function buildSlip(slip, object) {
   return cutKids.concat([
     {
       name: "taper",
-      components: { world_shape: shape, curve: { closed: false, points }, material: { asset: mp.material } },
+      components: {
+        world_shape: shape, curve: { closed: false, points }, material: { asset: mp.material },
+        // Its edge line and the chevrons at its thin end (materials/road_deck.material.wgsl, role 3), in
+        // the main road's u (from this taper's start) and across.
+        material_values: {
+          role: 3, taper_e: [e, mirror ? -1 : 1, 0, 0],
+          taper_w1: [0, stations[0][1], stations[1][0] - from, stations[1][1]].map((x) => Math.round(x * 1000) / 1000),
+          taper_w2: [stations[1][0] - from, stations[1][1], stations[2][0] - from, stations[2][1]].map((x) => Math.round(x * 1000) / 1000),
+        },
+      },
     },
     {
       name: "ramp mouth",
@@ -1583,8 +1602,22 @@ function buildApproach(approach, object) {
   if (turn === "right" || turn === "both") sides.push(dir === "in" ? "right" : "left");
   const ground = object.refs && object.refs.ground ? object.refs.ground.id : null;
   const blend = road.components.road && road.components.road.blend != null ? road.components.road.blend : 1.5;
+  // The line across the turn lane and its arrows (materials/road_deck.material.wgsl, role 4), in the
+  // road's u from the lane's start: traffic drives along +u on an "in" arm, -u on an "out" arm.
+  const dirSign = dir === "in" ? 1 : -1;
+  const uLine = dir === "in" ? dm - STOP_OUT - stations[0][0] : dm + STOP_OUT - stations[0][0];
+  const code = RULE_CODES[ruleFor(j, road.id)] || 0;
   return sides.map((side) => {
     const mirror = side === "left";
+    // The way it turns, to the traffic: on an "in" arm the road's left is the traffic's left.
+    const turnsLeft = dir === "in" ? mirror : !mirror;
+    const r3 = (x) => Math.round(x * 1000) / 1000;
+    const marks = {
+      role: 4,
+      lane: [r3((mirror ? -1 : 1) * (e + w / 2)), r3(w / 2), dirSign, turnsLeft ? 2 : 3],
+      arrows: [r3(uLine - dirSign * 12), r3(uLine - dirSign * 24), 0, 0],
+      lane_line: [r3(uLine), code, 0, 0],
+    };
     const points = [];
     for (let k = 0; k + 1 < stations.length; k++) {
       const [d0, w0] = stations[k], [d1, w1] = stations[k + 1];
@@ -1609,6 +1642,6 @@ function buildApproach(approach, object) {
     faces["start"] = faces["end"] = GRASS;
     const shape = { shape: "Sweep", outline, follow: "Upright", rings: "Square", interval: 1, faces, blend };
     if (ground) shape[JOINS] = ground;
-    return { name: "turn lane " + side, components: { world_shape: shape, curve: { closed: false, points }, material: { asset: p.material } } };
+    return { name: "turn lane " + side, components: { world_shape: shape, curve: { closed: false, points }, material: { asset: p.material }, material_values: marks } };
   });
 }

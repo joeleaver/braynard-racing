@@ -41,7 +41,7 @@ param warn_b: f32 = 0.0 range(0, 100);
 // the way out along its arm), half-width]; with a priority road, through_1/2 name the two arms it runs
 // between [i, j] and through_w/through_d say how it's marked [lanes out, line width, edge width, centre
 // (1 dashed, 2 solid)] and [dash, period]; a roundabout's ring is [island radius, outer radius].
-param role: f32 = 0.0 range(0, 2);
+param role: f32 = 0.0 range(0, 4);    // 0 deck, 1 pad, 2 roundabout, 3 slip taper, 4 turn lane
 param arms: f32 = 0.0 range(0, 6);
 param mouth_1: vec4f = (0.0, 0.0, 0.0, 0.0);
 param mouth_2: vec4f = (0.0, 0.0, 0.0, 0.0);
@@ -54,6 +54,21 @@ param through_2: vec4f = (0.0, 0.0, 0.0, 0.0);
 param through_w: vec4f = (4.0, 0.12, 0.15, 1.0);
 param through_d: vec4f = (4.0, 12.0, 0.0, 0.0);
 param ring: vec4f = (0.0, 0.0, 0.0, 0.0);
+// A roundabout arm's splitter island ends in a point on the road's last span: hatching runs on from it,
+// [u at the point, how far it runs (+ toward larger u, - toward smaller), half-width at the point, 0].
+param nose_a: vec4f = (0.0, 0.0, 0.0, 0.0);
+param nose_b: vec4f = (0.0, 0.0, 0.0, 0.0);
+// A slip road's taper (role 3), in its main road's u and across: [e (where the main road's deck ends),
+// side (+1 right, -1 left), 0, 0], and its width along it as two straight runs [u0, w0, u1, w1].
+param taper_e: vec4f = (0.0, 1.0, 0.0, 0.0);
+param taper_w1: vec4f = (0.0, 0.0, 0.0, 0.0);
+param taper_w2: vec4f = (0.0, 0.0, 0.0, 0.0);
+// A turn lane (role 4), in its road's u and across: [lane centre across, lane half-width, which way
+// traffic drives along u (+1/-1), arrow (1 ahead, 2 left, 3 right)], where its two arrows' tails are
+// [u, u, 0, 0], and its line across [u, rule, 0, 0].
+param lane: vec4f = (0.0, 0.0, 1.0, 1.0);
+param arrows: vec4f = (0.0, 0.0, 0.0, 0.0);
+param lane_line: vec4f = (0.0, 0.0, 0.0, 0.0);
 
 fn hash2(p: vec2<f32>) -> f32 {
     let q = fract(p * vec2<f32>(0.1031, 0.1030));
@@ -188,6 +203,59 @@ fn roundabout(p: vec2<f32>, aa: f32) -> f32 {
     return paint;
 }
 
+fn seg_dist(p: vec2<f32>, a: vec2<f32>, b: vec2<f32>) -> f32 {
+    let ab = b - a;
+    let f = clamp(dot(p - a, ab) / max(dot(ab, ab), 1e-6), 0.0, 1.0);
+    return distance(p, a + ab * f);
+}
+
+fn in_tri(p: vec2<f32>, a: vec2<f32>, b: vec2<f32>, c: vec2<f32>) -> bool {
+    let d1 = (p.x - b.x) * (a.y - b.y) - (a.x - b.x) * (p.y - b.y);
+    let d2 = (p.x - c.x) * (b.y - c.y) - (b.x - c.x) * (p.y - c.y);
+    let d3 = (p.x - a.x) * (c.y - a.y) - (c.x - a.x) * (p.y - a.y);
+    let neg = d1 < 0.0 || d2 < 0.0 || d3 < 0.0;
+    let pos = d1 > 0.0 || d2 > 0.0 || d3 > 0.0;
+    return !(neg && pos);
+}
+
+// A lane arrow 6 m long, its tail at the origin: x forward, y to the traffic's left. 1 ahead, 2 left, 3 right.
+fn arrow(q: vec2<f32>, kind: f32, aa: f32) -> f32 {
+    if q.x < -0.5 || q.x > 6.5 || abs(q.y) > 2.0 { return 0.0; }
+    if kind < 1.5 {
+        let shaft = 1.0 - smoothstep(0.15 - aa, 0.15 + aa, seg_dist(q, vec2<f32>(0.0, 0.0), vec2<f32>(4.2, 0.0)));
+        let head = select(0.0, 1.0, in_tri(q, vec2<f32>(4.0, 0.55), vec2<f32>(4.0, -0.55), vec2<f32>(6.0, 0.0)));
+        return max(shaft, head);
+    }
+    let y = select(-q.y, q.y, kind < 2.5);              // a right arrow is a left one mirrored
+    let p = vec2<f32>(q.x, y);
+    let bend = vec2<f32>(4.2, 0.9);
+    let d = vec2<f32>(0.8, 0.6);
+    let n = vec2<f32>(-0.6, 0.8);
+    let shaft = min(seg_dist(p, vec2<f32>(0.0, 0.0), vec2<f32>(3.0, 0.0)), seg_dist(p, vec2<f32>(3.0, 0.0), bend));
+    let body = 1.0 - smoothstep(0.15 - aa, 0.15 + aa, shaft);
+    let head = select(0.0, 1.0, in_tri(p, bend + n * 0.55, bend - n * 0.55, bend + d * 1.5));
+    return max(body, head);
+}
+
+// Chevron hatching in a strip: stripes `spacing` apart along u, folded about the strip's middle.
+fn chevrons(u: f32, from_mid: f32, spacing: f32, aa: f32) -> f32 {
+    let t = fract((u + abs(from_mid)) / spacing) * spacing;
+    let w = spacing * 0.2;
+    return smoothstep(-aa, aa, t) * (1.0 - smoothstep(w - aa, w + aa, t));
+}
+
+// Hatching run on from a splitter island's point, narrowing to nothing, with a border.
+fn nose(along: f32, across: f32, n: vec4<f32>, aa: f32) -> f32 {
+    if n.y == 0.0 { return 0.0; }
+    let t = (along - n.x) / n.y;                         // 0 at the point, 1 where it ends
+    if t < 0.0 || t > 1.0 { return 0.0; }
+    let half = n.z * (1.0 - t);
+    if abs(across) > half + 0.1 { return 0.0; }
+    let border = stroke(abs(across) - half, 0.06, aa);
+    let fill = select(0.0, chevrons(along, across, 1.5, aa), abs(across) < half);
+    return max(border, fill);
+}
+
 // Diagonal stripes, `spacing` apart, about a third of it wide.
 fn hatched(along: f32, across: f32, spacing: f32, aa: f32) -> f32 {
     let t = fract((along + across) / spacing) * spacing;
@@ -247,6 +315,41 @@ fn surface(s: SurfaceIn) -> Surface {
             paint = max(paint, through(p, params.through_2, aa));
         } else {
             paint = max(paint, roundabout(p, aa));
+        }
+    }
+
+    // A roundabout arm's splitter-island points.
+    paint = max(paint, nose(along, across, params.nose_a, aa));
+    paint = max(paint, nose(along, across, params.nose_b, aa));
+
+    // A slip road's taper: its outer edge line where it is wide enough, chevrons where it is narrow.
+    if params.role > 2.5 && params.role < 3.5 {
+        let e = params.taper_e.x;
+        let into = across * params.taper_e.y - e;
+        var w = params.taper_w1.y;
+        if along <= params.taper_w1.z {
+            w = mix(params.taper_w1.y, params.taper_w1.w, clamp((along - params.taper_w1.x) / max(params.taper_w1.z - params.taper_w1.x, 0.01), 0.0, 1.0));
+        } else {
+            w = mix(params.taper_w2.y, params.taper_w2.w, clamp((along - params.taper_w2.x) / max(params.taper_w2.z - params.taper_w2.x, 0.01), 0.0, 1.0));
+        }
+        if w > 1.5 {
+            paint = max(paint, stroke(into - (w - 0.45), 0.075, aa));
+        }
+        if w < 3.0 && into > 0.0 && into < w - 0.3 {
+            paint = max(paint, chevrons(along, into - w * 0.5, 2.0, aa));
+        }
+    }
+
+    // A turn lane: its two arrows, and the line across it.
+    if params.role > 3.5 {
+        let dir = params.lane.z;
+        let lat = (across - params.lane.x) * -dir;
+        if params.arrows.x > 0.0 {
+            paint = max(paint, arrow(vec2<f32>((along - params.arrows.x) * dir, lat), params.lane.w, aa));
+            paint = max(paint, arrow(vec2<f32>((along - params.arrows.y) * dir, lat), params.lane.w, aa));
+        }
+        if params.lane_line.y > 0.5 {
+            paint = max(paint, way_in((params.lane_line.x - along) * dir, abs(across - params.lane.x), params.lane.y, params.lane_line.y, aa));
         }
     }
 
